@@ -360,25 +360,15 @@ function CannedPicker({ items, onSelect, onClose }) {
 
 function KBPicker({ items, onSelect, onClose }) {
   const [search, setSearch] = useState('')
-  const [loading, setLoading] = useState(null)
   const filtered = items.filter(a =>
     a.title.toLowerCase().includes(search.toLowerCase()) ||
     (a.excerpt || '').toLowerCase().includes(search.toLowerCase()) ||
     (a.folder_name || '').toLowerCase().includes(search.toLowerCase())
   )
 
-  async function handleSelect(article) {
-    setLoading(article.id)
-    const full = await apiFetch(`/api/kb/${article.id}`).then(r => r.json()).catch(() => null)
+  function handleSelect(article) {
     const portalUrl = `${window.location.origin}/portal/kb/${article.id}`
-    let html = `<h2>📖 ${article.title}</h2>`
-    if (full?.body) {
-      html += full.body
-    } else if (article.excerpt) {
-      html += `<p>${article.excerpt.trim()}</p>`
-    }
-    html += `<p><a href="${portalUrl}">Read the full article →</a></p>`
-    onSelect(html)
+    onSelect(`<a href="${portalUrl}">${article.title}</a>`)
   }
 
   return (
@@ -388,8 +378,7 @@ function KBPicker({ items, onSelect, onClose }) {
         {filtered.length === 0 && <div className={styles.cannedEmpty}>No articles found{search ? ` matching "${search}"` : ''}.</div>}
         <div className={styles.cannedList}>
           {filtered.map(article => (
-            <div key={article.id} className={`${styles.kbItem} ${loading === article.id ? styles.kbItemLoading : ''}`}
-              onClick={() => !loading && handleSelect(article)}>
+            <div key={article.id} className={styles.kbItem} onClick={() => handleSelect(article)}>
               <div className={styles.kbItemHeader}>
                 <span className={styles.cannedTitle}>{article.title}</span>
                 {article.folder_name && (

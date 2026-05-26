@@ -321,23 +321,39 @@ router.post('/service-catalog/:id/submit', portalAuth, async (req, res) => {
   }
 });
 
+// Resolve the right M365 tenant for a portal request:
+// 1. Tenant linked to the contact's organisation
+// 2. Tenant pinned to the form
+// 3. First connected tenant
+async function resolvePortalTenant(contactId, formId) {
+  // 1. Org-linked tenant
+  if (contactId) {
+    const cr = await db.query('SELECT organisation_id FROM contacts WHERE id = $1', [contactId]);
+    const orgId = cr.rows[0]?.organisation_id;
+    if (orgId) {
+      const tr = await db.query('SELECT * FROM m365_tenants WHERE organisation_id = $1 AND connected = true LIMIT 1', [orgId]);
+      if (tr.rows[0]) return tr.rows[0];
+    }
+  }
+  // 2. Form-pinned tenant
+  if (formId) {
+    const fr = await db.query('SELECT automation_tenant_id FROM service_request_forms WHERE id = $1', [formId]);
+    const tenantId = fr.rows[0]?.automation_tenant_id;
+    if (tenantId) {
+      const tr = await db.query('SELECT * FROM m365_tenants WHERE id = $1 AND connected = true', [tenantId]);
+      if (tr.rows[0]) return tr.rows[0];
+    }
+  }
+  // 3. First connected tenant
+  const tr = await db.query('SELECT * FROM m365_tenants WHERE connected = true ORDER BY created_at ASC LIMIT 1');
+  return tr.rows[0] || null;
+}
+
 // GET /api/portal/graph/users?form_id=... — fetch live Entra ID users for user_picker fields
 router.get('/graph/users', portalAuth, async (req, res) => {
   const { form_id } = req.query;
   try {
-    let tenant = null;
-    if (form_id) {
-      const fr = await db.query('SELECT automation_tenant_id FROM service_request_forms WHERE id = $1', [form_id]);
-      const tenantId = fr.rows[0]?.automation_tenant_id;
-      if (tenantId) {
-        const tr = await db.query('SELECT * FROM m365_tenants WHERE id = $1 AND connected = true', [tenantId]);
-        tenant = tr.rows[0] || null;
-      }
-    }
-    if (!tenant) {
-      const tr = await db.query('SELECT * FROM m365_tenants WHERE connected = true ORDER BY created_at ASC LIMIT 1');
-      tenant = tr.rows[0] || null;
-    }
+    const tenant = await resolvePortalTenant(req.contact?.id, form_id);
     if (!tenant) return res.json({ users: [], connected: false });
 
     const tokenUrl = `https://login.microsoftonline.com/${tenant.tenant_id}/oauth2/v2.0/token`;
@@ -371,19 +387,7 @@ router.get('/graph/users', portalAuth, async (req, res) => {
 router.get('/graph/groups', portalAuth, async (req, res) => {
   const { form_id } = req.query;
   try {
-    let tenant = null;
-    if (form_id) {
-      const fr = await db.query('SELECT automation_tenant_id FROM service_request_forms WHERE id = $1', [form_id]);
-      const tenantId = fr.rows[0]?.automation_tenant_id;
-      if (tenantId) {
-        const tr = await db.query('SELECT * FROM m365_tenants WHERE id = $1 AND connected = true', [tenantId]);
-        tenant = tr.rows[0] || null;
-      }
-    }
-    if (!tenant) {
-      const tr = await db.query('SELECT * FROM m365_tenants WHERE connected = true ORDER BY created_at ASC LIMIT 1');
-      tenant = tr.rows[0] || null;
-    }
+    const tenant = await resolvePortalTenant(req.contact?.id, form_id);
     if (!tenant) return res.json({ groups: [], connected: false });
 
     const tokenUrl = `https://login.microsoftonline.com/${tenant.tenant_id}/oauth2/v2.0/token`;

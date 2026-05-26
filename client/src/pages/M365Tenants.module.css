@@ -178,6 +178,35 @@
   font-family: 'SF Mono', 'Fira Mono', monospace;
 }
 
+.tenantOrgRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.tenantOrgLabel {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.tenantOrgSelect {
+  font-size: 12.5px;
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--bg);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.tenantOrgSaving {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
 .testOk {
   margin-top: 6px;
   font-size: 12.5px;

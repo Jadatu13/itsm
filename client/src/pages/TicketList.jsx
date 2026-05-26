@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import PageHeader from '../components/PageHeader'
 import { StatusBadge, PriorityBadge, CategoryBadge, SourceBadge, CATEGORY_OPTIONS, SOURCE_OPTIONS } from '../components/Badge'
 import Modal from '../components/Modal'
+import ConfirmModal from '../components/ConfirmModal'
 import ContactSelect from '../components/ContactSelect'
 import ContactForm from '../components/ContactForm'
 import { formatDate } from '../utils/format'
@@ -22,6 +23,8 @@ export default function TicketList() {
   const [orgs, setOrgs] = useState([])
   const [search, setSearch] = useState('')
   const [showModal, setShowModal] = useState(false)
+  const [selected, setSelected] = useState(new Set())
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -44,15 +47,45 @@ export default function TicketList() {
   }, [statusFilter, search, priorityFilter, categoryFilter, orgFilter, sourceFilter])
 
   useEffect(() => { fetchTickets() }, [fetchTickets])
+  useEffect(() => { setSelected(new Set()) }, [tickets])
+
+  function toggleSelect(id) {
+    setSelected(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
+  function toggleSelectAll() {
+    if (selected.size === tickets.length) {
+      setSelected(new Set())
+    } else {
+      setSelected(new Set(tickets.map(t => t.id)))
+    }
+  }
+
+  async function handleBulkDelete() {
+    await Promise.all([...selected].map(id => apiFetch(`/api/tickets/${id}`, { method: 'DELETE' })))
+    setSelected(new Set())
+    fetchTickets()
+  }
 
   return (
     <div className={styles.page}>
       <PageHeader
         title="Tickets"
         action={
-          <button className={styles.btnNew} onClick={() => setShowModal(true)}>
-            + New Ticket
-          </button>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            {selected.size > 0 && (
+              <button className={styles.btnDelete} onClick={() => setConfirmBulkDelete(true)}>
+                Delete {selected.size} ticket{selected.size !== 1 ? 's' : ''}
+              </button>
+            )}
+            <button className={styles.btnNew} onClick={() => setShowModal(true)}>
+              + New Ticket
+            </button>
+          </div>
         }
       />
       <div className={styles.content}>
@@ -104,6 +137,14 @@ export default function TicketList() {
             <table className={styles.table}>
               <thead>
                 <tr>
+                  <th className={styles.checkCol}>
+                    <input
+                      type="checkbox"
+                      checked={tickets.length > 0 && selected.size === tickets.length}
+                      onChange={toggleSelectAll}
+                      title="Select all"
+                    />
+                  </th>
                   <th>Reference</th>
                   <th>Subject</th>
                   <th>Contact</th>
@@ -117,10 +158,17 @@ export default function TicketList() {
               </thead>
               <tbody>
                 {tickets.length === 0 && (
-                  <tr><td colSpan={9} className={styles.empty}>No tickets found.</td></tr>
+                  <tr><td colSpan={10} className={styles.empty}>No tickets found.</td></tr>
                 )}
                 {tickets.map(t => (
-                  <tr key={t.id} className={styles.row} onClick={() => navigate(`/tickets/${t.id}`)}>
+                  <tr
+                    key={t.id}
+                    className={`${styles.row} ${selected.has(t.id) ? styles.rowSelected : ''}`}
+                    onClick={() => navigate(`/tickets/${t.id}`)}
+                  >
+                    <td className={styles.checkCol} onClick={e => { e.stopPropagation(); toggleSelect(t.id) }}>
+                      <input type="checkbox" checked={selected.has(t.id)} onChange={() => toggleSelect(t.id)} />
+                    </td>
                     <td className={styles.ref}>{t.reference}</td>
                     <td className={styles.subject}>{t.subject}</td>
                     <td>{t.contact_name}</td>
@@ -145,6 +193,16 @@ export default function TicketList() {
             setShowModal(false)
             navigate(`/tickets/${ticket.id}`)
           }}
+        />
+      )}
+
+      {confirmBulkDelete && (
+        <ConfirmModal
+          title={`Delete ${selected.size} ticket${selected.size !== 1 ? 's' : ''}?`}
+          message="This will permanently delete the selected tickets and all their replies. This cannot be undone."
+          confirmLabel={`Delete ${selected.size} Ticket${selected.size !== 1 ? 's' : ''}`}
+          onConfirm={handleBulkDelete}
+          onClose={() => setConfirmBulkDelete(false)}
         />
       )}
     </div>

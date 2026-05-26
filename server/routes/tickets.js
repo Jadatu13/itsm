@@ -271,6 +271,18 @@ router.patch('/:id/status', async (req, res) => {
   }
 });
 
+// DELETE /api/tickets/:id
+router.delete('/:id', async (req, res) => {
+  try {
+    const result = await db.query('DELETE FROM tickets WHERE id = $1 RETURNING id', [req.params.id]);
+    if (!result.rows.length) return res.status(404).json({ error: 'Ticket not found' });
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to delete ticket' });
+  }
+});
+
 // GET /api/tickets/:id/replies
 router.get('/:id/replies', async (req, res) => {
   try {

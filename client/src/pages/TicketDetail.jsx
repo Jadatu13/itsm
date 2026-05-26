@@ -1,8 +1,9 @@
 import { useEffect, useState, useRef } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 import PageHeader from '../components/PageHeader'
 import { StatusBadge, PriorityBadge, CategoryBadge, SourceBadge, CATEGORY_OPTIONS, SOURCE_OPTIONS } from '../components/Badge'
 import Modal from '../components/Modal'
+import ConfirmModal from '../components/ConfirmModal'
 import ContactSelect from '../components/ContactSelect'
 import { formatDate } from '../utils/format'
 import { apiFetch } from '../utils/api'
@@ -12,6 +13,7 @@ import styles from './TicketDetail.module.css'
 
 export default function TicketDetail() {
   const { id } = useParams()
+  const navigate = useNavigate()
   const [ticket, setTicket]     = useState(null)
   const [replies, setReplies]   = useState([])
   const [agents, setAgents]     = useState([])
@@ -24,6 +26,7 @@ export default function TicketDetail() {
   const [showEdit, setShowEdit] = useState(false)
   const [showCanned, setShowCanned] = useState(false)
   const [cannedList, setCannedList] = useState([])
+  const [confirmDelete, setConfirmDelete] = useState(false)
 
   const isFirstLoad  = useRef(true)
   const repliesEndRef = useRef(null)
@@ -124,7 +127,12 @@ export default function TicketDetail() {
     <div className={styles.page}>
       <PageHeader
         title={ticket.reference}
-        action={<button className={styles.btnEdit} onClick={() => setShowEdit(true)}>Edit Ticket</button>}
+        action={
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className={styles.btnEdit} onClick={() => setShowEdit(true)}>Edit Ticket</button>
+            <button className={styles.btnDelete} onClick={() => setConfirmDelete(true)}>Delete</button>
+          </div>
+        }
       />
       <div className={styles.layout}>
         {/* ── Left column ── */}
@@ -272,6 +280,19 @@ export default function TicketDetail() {
           items={cannedList}
           onSelect={body => { setReplyBody(prev => prev ? prev + '\n\n' + body : body); setShowCanned(false) }}
           onClose={() => setShowCanned(false)}
+        />
+      )}
+
+      {confirmDelete && (
+        <ConfirmModal
+          title="Delete ticket?"
+          message={`This will permanently delete ${ticket.reference} and all its replies. This cannot be undone.`}
+          confirmLabel="Delete Ticket"
+          onConfirm={async () => {
+            await apiFetch(`/api/tickets/${id}`, { method: 'DELETE' })
+            navigate('/tickets')
+          }}
+          onClose={() => setConfirmDelete(false)}
         />
       )}
     </div>

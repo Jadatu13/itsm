@@ -80,16 +80,19 @@ function RejectModal({ request, onClose, onConfirm }) {
   )
 }
 
-// Build a label-keyed map of field values from UUID-keyed raw values + form field definitions
+// Build a label-keyed map of field values in form-defined order
 function resolveFieldValues(rawValues, formFields) {
   if (!rawValues || typeof rawValues !== 'object') return []
   const fieldDefs = Array.isArray(formFields) ? formFields : []
-  return Object.entries(rawValues)
-    .filter(([, val]) => val !== '' && val !== null && val !== undefined)
-    .map(([key, val]) => {
-      const def = fieldDefs.find(f => f.id === key)
-      return { label: def?.label || key, value: String(val) }
-    })
+  if (fieldDefs.length === 0) {
+    return Object.entries(rawValues)
+      .filter(([, val]) => val !== '' && val !== null && val !== undefined)
+      .map(([key, val]) => ({ label: key, value: String(val) }))
+  }
+  return fieldDefs
+    .map(def => ({ label: def.label, value: rawValues[def.id] }))
+    .filter(({ value }) => value !== '' && value !== null && value !== undefined)
+    .map(({ label, value }) => ({ label, value: String(value) }))
 }
 
 function RequestCard({ request, onApprove, onReject, onRerun, onRefresh }) {

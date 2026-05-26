@@ -65,11 +65,12 @@ const SETUP_STEPS = [
   },
 ]
 
-function ConnectModal({ onClose, onConnected }) {
+function ConnectModal({ onClose, onConnected, orgs }) {
   const [displayName, setDisplayName] = useState('')
   const [tenantId, setTenantId] = useState('')
   const [clientId, setClientId] = useState('')
   const [clientSecret, setClientSecret] = useState('')
+  const [orgId, setOrgId] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -83,7 +84,7 @@ function ConnectModal({ onClose, onConnected }) {
     try {
       const res = await apiFetch('/api/tenants', {
         method: 'POST',
-        body: JSON.stringify({ display_name: displayName, tenant_id: tenantId, client_id: clientId, client_secret: clientSecret }),
+        body: JSON.stringify({ display_name: displayName, tenant_id: tenantId, client_id: clientId, client_secret: clientSecret, organisation_id: orgId || null }),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -175,6 +176,14 @@ function ConnectModal({ onClose, onConnected }) {
               />
               <p className={styles.hint}>Stored securely. The secret is used to authenticate automation actions.</p>
             </div>
+            <div className={styles.formGroup}>
+              <label className={styles.label}>Link to Organisation</label>
+              <select className={styles.input} value={orgId} onChange={e => setOrgId(e.target.value)}>
+                <option value="">— Not linked —</option>
+                {orgs.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+              </select>
+              <p className={styles.hint}>When linked, service requests from this organisation's contacts will automatically use this tenant for automation.</p>
+            </div>
           </div>
 
           {error && <div className={styles.error}>{error}</div>}
@@ -193,18 +202,39 @@ function ConnectModal({ onClose, onConnected }) {
 
 export default function M365Tenants() {
   const [tenants, setTenants] = useState([])
+  const [orgs, setOrgs] = useState([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [confirmDisconnect, setConfirmDisconnect] = useState(null) // tenant to disconnect
   const [testing, setTesting] = useState(null)
   const [testResult, setTestResult] = useState({})
+  const [linkingOrg, setLinkingOrg] = useState({}) // tenantId → orgId being saved
 
   useEffect(() => {
-    apiFetch('/api/tenants')
-      .then(r => r.json())
-      .then(d => setTenants(Array.isArray(d) ? d : []))
-      .finally(() => setLoading(false))
+    Promise.all([
+      apiFetch('/api/tenants').then(r => r.json()),
+      apiFetch('/api/organisations').then(r => r.json()),
+    ]).then(([t, o]) => {
+      setTenants(Array.isArray(t) ? t : [])
+      setOrgs(Array.isArray(o) ? o : [])
+    }).finally(() => setLoading(false))
   }, [])
+
+  async function handleOrgLink(tenantId, orgId) {
+    setLinkingOrg(prev => ({ ...prev, [tenantId]: orgId }))
+    const res = await apiFetch(`/api/tenants/${tenantId}/organisation`, {
+      method: 'PATCH',
+      body: JSON.stringify({ organisation_id: orgId || null }),
+    })
+    const data = await res.json()
+    if (res.ok) {
+      setTenants(prev => prev.map(t => t.id === tenantId
+        ? { ...t, organisation_id: data.organisation_id, organisation_name: data.organisation_name }
+        : t
+      ))
+    }
+    setLinkingOrg(prev => { const n = { ...prev }; delete n[tenantId]; return n })
+  }
 
   function handleConnected(tenant) {
     setTenants(prev => [tenant, ...prev])
@@ -292,6 +322,19 @@ export default function M365Tenants() {
                   Client ID: <code>{t.client_id}</code>
                   &nbsp;|&nbsp;Secret: <code>{t.client_secret_hint}</code>
                 </div>
+                <div className={styles.tenantOrgRow}>
+                  <span className={styles.tenantOrgLabel}>Linked organisation:</span>
+                  <select
+                    className={styles.tenantOrgSelect}
+                    value={t.organisation_id ?? ''}
+                    onChange={e => handleOrgLink(t.id, e.target.value)}
+                    disabled={t.id in linkingOrg}
+                  >
+                    <option value="">— Not linked —</option>
+                    {orgs.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+                  </select>
+                  {t.id in linkingOrg && <span className={styles.tenantOrgSaving}>Saving…</span>}
+                </div>
                 {testResult[t.id] && (
                   <div className={testResult[t.id].ok ? styles.testOk : styles.testFail}>
                     {testResult[t.id].msg}
@@ -331,6 +374,7 @@ export default function M365Tenants() {
         <ConnectModal
           onClose={() => setShowModal(false)}
           onConnected={handleConnected}
+          orgs={orgs}
         />
       )}
 

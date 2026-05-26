@@ -824,22 +824,48 @@ async function executeAutomation(serviceRequest, form) {
   // Resolve field values → action params
   const params = resolveParams(automationAction, serviceRequest.field_values || {}, form.fields || []);
 
-  // Look up the tenant (prefer form's pinned tenant, else first connected tenant)
+  // Resolve tenant: org-linked tenant > form-pinned tenant > first connected tenant
   let tenant = null;
+  let contactEmail = null;
   try {
-    const tenantId = form.automation_tenant_id || serviceRequest.tenant_id;
-    if (tenantId) {
-      const r = await db.query('SELECT * FROM m365_tenants WHERE id = $1 AND connected = true', [tenantId]);
-      tenant = r.rows[0] || null;
-    } else {
+    // 1. Look up the contact's organisation and find the tenant linked to that org
+    if (serviceRequest.contact_id) {
+      const cr = await db.query(
+        `SELECT c.email, c.organisation_id
+         FROM contacts c WHERE c.id = $1`,
+        [serviceRequest.contact_id]
+      );
+      const contact = cr.rows[0];
+      if (contact) {
+        contactEmail = contact.email;
+        if (contact.organisation_id) {
+          const tr = await db.query(
+            `SELECT * FROM m365_tenants WHERE organisation_id = $1 AND connected = true LIMIT 1`,
+            [contact.organisation_id]
+          );
+          tenant = tr.rows[0] || null;
+        }
+      }
+    }
+
+    // 2. Fall back to form's pinned tenant
+    if (!tenant) {
+      const tenantId = form.automation_tenant_id || serviceRequest.tenant_id;
+      if (tenantId) {
+        const r = await db.query('SELECT * FROM m365_tenants WHERE id = $1 AND connected = true', [tenantId]);
+        tenant = r.rows[0] || null;
+      }
+    }
+
+    // 3. Last resort: first connected tenant
+    if (!tenant) {
       const r = await db.query('SELECT * FROM m365_tenants WHERE connected = true ORDER BY created_at ASC LIMIT 1');
       tenant = r.rows[0] || null;
     }
   } catch (_) { /* table may not exist yet */ }
 
-  // Fetch submitting contact's email so the domain can be used for UPN auto-derivation
-  let contactEmail = null;
-  if (serviceRequest.contact_id) {
+  // Fetch contact email if not already loaded above
+  if (!contactEmail && serviceRequest.contact_id) {
     try {
       const cr = await db.query('SELECT email FROM contacts WHERE id = $1', [serviceRequest.contact_id]);
       contactEmail = cr.rows[0]?.email || null;

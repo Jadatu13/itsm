@@ -19,6 +19,22 @@
 }
 .btnNew:hover { background: var(--accent-hover); }
 
+.btnDelete {
+  background: none;
+  border: 1px solid #FECACA;
+  color: #DC2626;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.btnDelete:hover { background: #FEF2F2; border-color: #DC2626; }
+
+.checkCol { width: 36px; padding-left: 12px !important; }
+.rowSelected { background: #F5F7FF !important; }
+
 .filters {
   display: flex;
   gap: 12px;

@@ -6,9 +6,12 @@ const db = require('../db');
 router.get('/', async (req, res) => {
   try {
     const result = await db.query(
-      `SELECT id, display_name, tenant_id, client_id, connected, connected_at, created_at,
-              LEFT(client_secret, 4) || '••••••••' AS client_secret_hint
-       FROM m365_tenants ORDER BY created_at DESC`
+      `SELECT t.id, t.display_name, t.tenant_id, t.client_id, t.connected, t.connected_at, t.created_at,
+              t.organisation_id, o.name AS organisation_name,
+              LEFT(t.client_secret, 4) || '••••••••' AS client_secret_hint
+       FROM m365_tenants t
+       LEFT JOIN organisations o ON o.id = t.organisation_id
+       ORDER BY t.created_at DESC`
     );
     res.json(result.rows);
   } catch (err) {
@@ -19,7 +22,7 @@ router.get('/', async (req, res) => {
 
 // POST / — connect a new tenant (manual credential entry)
 router.post('/', async (req, res) => {
-  const { display_name, tenant_id, client_id, client_secret } = req.body;
+  const { display_name, tenant_id, client_id, client_secret, organisation_id } = req.body;
   if (!display_name || !tenant_id || !client_id || !client_secret) {
     return res.status(400).json({ error: 'display_name, tenant_id, client_id and client_secret are required.' });
   }
@@ -77,10 +80,10 @@ router.post('/', async (req, res) => {
   try {
     const result = await db.query(
       `INSERT INTO m365_tenants
-         (display_name, tenant_id, client_id, client_secret, access_token, token_expires_at, connected, connected_at)
-       VALUES ($1, $2, $3, $4, $5, $6, true, NOW())
-       RETURNING id, display_name, tenant_id, client_id, connected, connected_at, created_at`,
-      [resolvedName, tenant_id, client_id, client_secret, tokenData.access_token, expiresAt]
+         (display_name, tenant_id, client_id, client_secret, access_token, token_expires_at, connected, connected_at, organisation_id)
+       VALUES ($1, $2, $3, $4, $5, $6, true, NOW(), $7)
+       RETURNING id, display_name, tenant_id, client_id, connected, connected_at, created_at, organisation_id`,
+      [resolvedName, tenant_id, client_id, client_secret, tokenData.access_token, expiresAt, organisation_id || null]
     );
     res.status(201).json({ ...result.rows[0], ...(rolesWarning ? { warning: rolesWarning } : {}) });
   } catch (err) {
@@ -219,6 +222,29 @@ router.post('/:id/diagnose', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// PATCH /:id/organisation — link/unlink an organisation
+router.patch('/:id/organisation', async (req, res) => {
+  const { organisation_id } = req.body;
+  try {
+    const result = await db.query(
+      `UPDATE m365_tenants SET organisation_id = $1 WHERE id = $2
+       RETURNING id, organisation_id`,
+      [organisation_id || null, req.params.id]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Tenant not found' });
+    // Fetch org name for response
+    let organisation_name = null;
+    if (organisation_id) {
+      const org = await db.query('SELECT name FROM organisations WHERE id = $1', [organisation_id]);
+      organisation_name = org.rows[0]?.name || null;
+    }
+    res.json({ ...result.rows[0], organisation_name });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to update organisation link' });
   }
 });
 

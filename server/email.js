@@ -135,8 +135,21 @@ async function sendNewTicket({ to, firstName, reference, subject, description })
   });
 }
 
-async function sendAgentReply({ to, firstName, reference, ticketSubject, replyBody }) {
+async function sendAgentReply({ to, firstName, reference, ticketSubject, replyBody, history = [] }) {
   // replyBody is HTML from the rich text editor — render it directly, don't escape
+  const historyHtml = history.length ? `
+    <div style="margin-top:28px;border-top:1px solid #e5e5e0;padding-top:20px;">
+      <div style="font-size:11px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.07em;margin-bottom:16px;">Previous conversation</div>
+      ${history.map(r => `
+        <div style="margin-bottom:16px;opacity:0.85;">
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+            <span style="font-size:12px;font-weight:600;color:${r.is_agent_reply ? '#4F7FFF' : '#374151'};">${esc(r.sender_name)}</span>
+            <span style="font-size:11px;color:#9ca3af;">${new Date(r.created_at).toLocaleString('en-NZ', { day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' })}</span>
+          </div>
+          <div style="font-size:13px;color:#6b7280;line-height:1.55;border-left:2px solid #e5e5e0;padding-left:10px;">${inlineEmailStyles(r.is_agent_reply ? r.body : esc(r.body))}</div>
+        </div>`).join('')}
+    </div>` : '';
+
   const html = layout({
     headerColour: '#4F7FFF',
     title:     'You have a new reply on your support request',
@@ -155,7 +168,8 @@ async function sendAgentReply({ to, firstName, reference, ticketSubject, replyBo
       ${portalButton(reference)}
       <p style="margin:8px 0 0;color:#6b7280;font-size:13px;text-align:center;">
         Or reply directly to this email to respond.
-      </p>`,
+      </p>
+      ${historyHtml}`,
   });
   await sendMail({
     to,

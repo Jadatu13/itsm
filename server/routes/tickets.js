@@ -380,12 +380,28 @@ router.post('/:id/replies', async (req, res) => {
     // Only email the contact for non-internal agent replies
     if (isAgent && !isInternal) {
       const { reference, subject, first_name, email } = ticketCheck.rows[0];
+      // Fetch prior non-internal replies for the history thread (newest first, excluding the one just inserted)
+      const historyResult = await db.query(
+        `SELECT r.body, r.is_agent_reply, r.created_at,
+                CASE WHEN r.is_agent_reply THEN 'Support Agent'
+                     ELSE c.first_name || ' ' || c.last_name
+                END AS sender_name
+         FROM ticket_replies r
+         JOIN tickets t ON t.id = r.ticket_id
+         JOIN contacts c ON c.id = t.contact_id
+         WHERE r.ticket_id = $1
+           AND r.is_internal = false
+           AND r.id != $2
+         ORDER BY r.created_at DESC`,
+        [req.params.id, result.rows[0].id]
+      );
       sendAgentReply({
         to:            email,
         firstName:     first_name,
         reference,
         ticketSubject: subject,
         replyBody:     body,
+        history:       historyResult.rows,
       });
     }
   } catch (err) {

@@ -332,7 +332,7 @@ export default function TicketDetail() {
         <MergeTicketModal
           ticket={ticket}
           onClose={() => setShowMerge(false)}
-          onMerged={targetId => navigate(`/tickets/${targetId}`)}
+          onMerged={targetId => { setShowMerge(false); navigate(`/tickets/${targetId}`) }}
         />
       )}
     </div>

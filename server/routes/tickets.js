@@ -306,8 +306,9 @@ router.post('/:id/merge', async (req, res) => {
     await db.query('UPDATE ticket_replies SET ticket_id = $1 WHERE ticket_id = $2', [target_id, sourceId]);
 
     // Post an internal note on the target summarising what was merged in
+    const agentName = req.agent?.name || 'An agent';
     const noteLines = [
-      `<p><strong>Merged from ${src.reference}</strong></p>`,
+      `<p><strong>${agentName} merged ${src.reference} into this ticket.</strong></p>`,
       `<p><strong>Subject:</strong> ${src.subject}</p>`,
       src.contact_name ? `<p><strong>Contact:</strong> ${src.contact_name} (${src.contact_email})</p>` : null,
       src.priority     ? `<p><strong>Priority:</strong> ${src.priority}</p>` : null,

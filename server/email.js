@@ -125,6 +125,7 @@ async function sendNewTicket({ to, firstName, reference, subject, description })
 }
 
 async function sendAgentReply({ to, firstName, reference, ticketSubject, replyBody }) {
+  // replyBody is HTML from the rich text editor — render it directly, don't escape
   const html = layout({
     headerColour: '#4F7FFF',
     title:     'You have a new reply on your support request',
@@ -138,14 +139,14 @@ async function sendAgentReply({ to, firstName, reference, ticketSubject, replyBo
       </p>
       <div style="border-left:3px solid #4F7FFF;padding:12px 16px;background:#f5f8ff;border-radius:0 6px 6px 0;margin-bottom:0;">
         <div style="font-size:12px;font-weight:700;color:#4F7FFF;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">Support Agent</div>
-        <div style="font-size:14px;color:#374151;line-height:1.65;white-space:pre-wrap;">${esc(replyBody)}</div>
+        <div style="font-size:14px;color:#374151;line-height:1.65;">${inlineEmailStyles(replyBody)}</div>
       </div>`,
   });
   await sendMail({
     to,
     subject: `[${reference}] New reply on your support request`,
     html,
-    text: `Hi ${firstName},\n\nA support agent has replied to your request (${reference}):\n\n${replyBody}\n\nReply to this email to respond.`,
+    text: `Hi ${firstName},\n\nA support agent has replied to your request (${reference}):\n\n${stripTags(replyBody)}\n\nReply to this email to respond.`,
   });
 }
 
@@ -181,6 +182,24 @@ function esc(str) {
   return String(str ?? '')
     .replace(/&/g, '&amp;').replace(/</g, '&lt;')
     .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function stripTags(html) {
+  return String(html || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function inlineEmailStyles(html) {
+  return String(html || '')
+    .replace(/<p>/g, '<p style="margin:0 0 10px;">')
+    .replace(/<h1>/g, '<h1 style="font-size:18px;font-weight:700;margin:0 0 8px;">')
+    .replace(/<h2>/g, '<h2 style="font-size:16px;font-weight:700;margin:0 0 8px;">')
+    .replace(/<h3>/g, '<h3 style="font-size:14px;font-weight:700;margin:0 0 8px;">')
+    .replace(/<ul>/g, '<ul style="padding-left:20px;margin:0 0 10px;">')
+    .replace(/<ol>/g, '<ol style="padding-left:20px;margin:0 0 10px;">')
+    .replace(/<table>/g, '<table style="border-collapse:collapse;width:100%;margin:0 0 10px;">')
+    .replace(/<td>/g, '<td style="border:1px solid #e5e5e0;padding:6px 10px;vertical-align:top;">')
+    .replace(/<th>/g, '<th style="border:1px solid #e5e5e0;padding:6px 10px;background:#f9f9f7;font-weight:700;">')
+    .replace(/<a /g, '<a style="color:#4F7FFF;text-decoration:underline;" ');
 }
 
 module.exports = { sendNewTicket, sendAgentReply, sendTicketResolved };

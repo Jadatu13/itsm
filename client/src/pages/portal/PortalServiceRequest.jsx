@@ -1,7 +1,130 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { portalFetch } from '../../utils/portalApi'
 import styles from './Portal.module.css'
+
+function UserPickerField({ multi, value, onChange, users, loading }) {
+  const [search, setSearch] = useState('')
+  const [focused, setFocused] = useState(false)
+  const selectedEmails = multi ? (Array.isArray(value) ? value : []) : (value ? [value] : [])
+  const selectedUsers = selectedEmails.map(e => users.find(u => u.email === e)).filter(Boolean)
+  const filtered = search
+    ? users.filter(u => {
+        const q = search.toLowerCase()
+        return u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q)
+      })
+    : users
+  function toggle(email) {
+    if (multi) {
+      const cur = Array.isArray(value) ? value : []
+      onChange(cur.includes(email) ? cur.filter(e => e !== email) : [...cur, email])
+    } else {
+      onChange(value === email ? '' : email)
+      setFocused(false)
+      setSearch('')
+    }
+  }
+  return (
+    <div className={styles.userPickerWrap}>
+      {selectedUsers.length > 0 && (
+        <div className={styles.userPickerTags}>
+          {selectedUsers.map(u => (
+            <span key={u.email} className={styles.userPickerTag}>
+              {u.name}
+              <button type="button" className={styles.userPickerTagRemove} onClick={() => toggle(u.email)}>×</button>
+            </span>
+          ))}
+        </div>
+      )}
+      <input
+        type="text"
+        className={styles.userPickerSearch}
+        placeholder={loading ? 'Loading staff list…' : `Click to browse ${users.length} staff, or type to search…`}
+        value={search}
+        onChange={e => setSearch(e.target.value)}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setTimeout(() => setFocused(false), 150)}
+        disabled={loading}
+        autoComplete="off"
+      />
+      {focused && (
+        <div className={styles.userPickerList}>
+          {filtered.length === 0 && (
+            <div className={styles.userPickerEmpty}>No staff found{search ? ` matching "${search}"` : ''}</div>
+          )}
+          {filtered.map(u => {
+            const sel = multi ? selectedEmails.includes(u.email) : value === u.email
+            return (
+              <div key={u.email} className={`${styles.userPickerItem} ${sel ? styles.userPickerItemSelected : ''}`} onMouseDown={() => toggle(u.email)}>
+                <div className={styles.userPickerItemInfo}>
+                  <span className={styles.userPickerItemName}>{u.name}</span>
+                  <span className={styles.userPickerItemEmail}>{u.email}</span>
+                </div>
+                {sel && <span className={styles.userPickerCheck}>✓</span>}
+              </div>
+            )
+          })}
+        </div>
+      )}
+      {!loading && users.length === 0 && (
+        <p className={styles.userPickerEmpty}>No users available — check your M365 tenant is connected.</p>
+      )}
+    </div>
+  )
+}
+
+function GroupPickerField({ value, onChange, groups, loading }) {
+  const [search, setSearch] = useState('')
+  const [focused, setFocused] = useState(false)
+  const selected = groups.find(g => g.name === value)
+  const filtered = search
+    ? groups.filter(g => g.name.toLowerCase().includes(search.toLowerCase()))
+    : groups
+  function select(name) {
+    onChange(name)
+    setSearch('')
+    setFocused(false)
+  }
+  return (
+    <div className={styles.userPickerWrap}>
+      {selected && !focused ? (
+        <div className={styles.userPickerTags}>
+          <span className={styles.userPickerTag}>
+            {selected.name}
+            <button type="button" className={styles.userPickerTagRemove} onClick={() => { onChange(''); setSearch('') }}>×</button>
+          </span>
+        </div>
+      ) : (
+        <>
+          <input
+            type="text"
+            className={styles.userPickerSearch}
+            placeholder={loading ? 'Loading groups…' : `Click to browse ${groups.length} groups, or type to search…`}
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setTimeout(() => setFocused(false), 150)}
+            disabled={loading}
+            autoComplete="off"
+          />
+          {focused && (
+            <div className={styles.userPickerList}>
+              {filtered.length === 0 && (
+                <div className={styles.userPickerEmpty}>No groups found{search ? ` matching "${search}"` : ''}</div>
+              )}
+              {filtered.map(g => (
+                <div key={g.id} className={`${styles.userPickerItem} ${value === g.name ? styles.userPickerItemSelected : ''}`} onMouseDown={() => select(g.name)}>
+                  <span className={styles.userPickerItemName}>{g.name}</span>
+                  {value === g.name && <span className={styles.userPickerCheck}>✓</span>}
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
 
 export default function PortalServiceRequest() {
   const { id } = useParams()
@@ -11,18 +134,41 @@ export default function PortalServiceRequest() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(null)
+  const [upnCheck, setUpnCheck] = useState({ checking: false, exists: null, checked: false })
+  const upnCheckTimer = useRef(null)
+  const [graphUsers, setGraphUsers] = useState([])
+  const [graphUsersLoading, setGraphUsersLoading] = useState(false)
+  const [graphGroups, setGraphGroups] = useState([])
+  const [graphGroupsLoading, setGraphGroupsLoading] = useState(false)
 
   useEffect(() => {
     portalFetch(`/api/portal/service-catalog/${id}`)
       .then(r => r.json())
       .then(data => {
         setForm(data)
-        // Init default values
         const init = {}
         if (Array.isArray(data.fields)) {
           data.fields.forEach(f => {
-            init[f.id] = f.type === 'checkbox' ? false : ''
+            init[f.id] = f.type === 'checkbox' ? false : (f.type === 'user_picker' && f.multi ? [] : '')
           })
+          // Fetch Graph users if any user_picker fields exist
+          if (data.fields.some(f => f.type === 'user_picker')) {
+            setGraphUsersLoading(true)
+            portalFetch(`/api/portal/graph/users?form_id=${id}`)
+              .then(r => r.json())
+              .then(d => setGraphUsers(d.users || []))
+              .catch(() => setGraphUsers([]))
+              .finally(() => setGraphUsersLoading(false))
+          }
+          // Fetch Graph groups if any group_picker fields exist
+          if (data.fields.some(f => f.type === 'group_picker')) {
+            setGraphGroupsLoading(true)
+            portalFetch(`/api/portal/graph/groups?form_id=${id}`)
+              .then(r => r.json())
+              .then(d => setGraphGroups(d.groups || []))
+              .catch(() => setGraphGroups([]))
+              .finally(() => setGraphGroupsLoading(false))
+          }
         }
         setValues(init)
       })
@@ -41,7 +187,9 @@ export default function PortalServiceRequest() {
     for (const field of form.fields || []) {
       if (field.required) {
         const val = values[field.id]
-        if (val === undefined || val === null || val === '' || val === false) {
+        const empty = val === undefined || val === null || val === '' || val === false
+          || (Array.isArray(val) && val.length === 0)
+        if (empty) {
           setError(`"${field.label}" is required.`)
           return
         }
@@ -65,6 +213,11 @@ export default function PortalServiceRequest() {
       } catch {
         // bad regex — skip silently
       }
+    }
+
+    if (upnCheck.exists && activeUpn) {
+      setError(`${activeUpn} is already taken. Please choose a different email address.`)
+      return
     }
 
     setSubmitting(true)
@@ -100,6 +253,11 @@ export default function PortalServiceRequest() {
   }
 
   function renderField(field) {
+    const isSplitEmail = contactDomain && (
+      (isCreateUser && field.id === emailFieldId) ||
+      (isCreateSharedMailbox && field.id === mailboxEmailFieldId)
+    )
+
     return (
       <div key={field.id} className={styles.fieldGroup}>
         {field.type !== 'checkbox' && (
@@ -109,7 +267,23 @@ export default function PortalServiceRequest() {
           </label>
         )}
 
-        {field.type === 'text' && (
+        {isSplitEmail && (
+          <div className={styles.splitEmailWrap}>
+            <input
+              id={field.id}
+              type="text"
+              className={styles.splitEmailLocal}
+              placeholder="e.g. jane"
+              value={values[field.id] || ''}
+              onChange={e => setValue(field.id, e.target.value.toLowerCase().replace(/[^a-z0-9._-]/g, ''))}
+              autoComplete="off"
+              spellCheck={false}
+            />
+            <span className={styles.splitEmailDomain}>@{contactDomain}</span>
+          </div>
+        )}
+
+        {!isSplitEmail && field.type === 'text' && (
           <input
             id={field.id}
             type="text"
@@ -142,7 +316,7 @@ export default function PortalServiceRequest() {
           >
             <option value="">Select an option…</option>
             {(field.options || []).map((opt, i) => (
-              <option key={i} value={opt.label}>{opt.label}</option>
+              <option key={i} value={opt.value || opt.label}>{opt.label}</option>
             ))}
           </select>
         )}
@@ -204,12 +378,90 @@ export default function PortalServiceRequest() {
           </div>
         )}
 
+        {field.type === 'user_picker' && (
+          <UserPickerField
+            multi={field.multi || false}
+            value={values[field.id]}
+            onChange={val => setValue(field.id, val)}
+            users={graphUsers}
+            loading={graphUsersLoading}
+          />
+        )}
+
+        {field.type === 'group_picker' && (
+          <GroupPickerField
+            value={values[field.id] || ''}
+            onChange={val => setValue(field.id, val)}
+            groups={graphGroups}
+            loading={graphGroupsLoading}
+          />
+        )}
+
         {field.helpText && (
           <p className={styles.fieldHelpText}>{field.helpText}</p>
         )}
       </div>
     )
   }
+
+  // Contact domain for UPN preview and split email
+  const contact = useMemo(() => {
+    try { return JSON.parse(localStorage.getItem('portal_contact') || 'null') } catch { return null }
+  }, [])
+  const contactDomain = contact?.email?.split('@')[1] || null
+  const isCreateUser = form?.automation_action?.type === 'create_user'
+  const isCreateSharedMailbox = form?.automation_action?.type === 'create_shared_mailbox'
+  const firstNameFieldId = isCreateUser ? form?.automation_action?.field_map?.first_name : null
+  const lastNameFieldId  = isCreateUser ? form?.automation_action?.field_map?.last_name  : null
+  const emailFieldId     = isCreateUser ? form?.automation_action?.field_map?.email       : null
+  const mailboxEmailFieldId = isCreateSharedMailbox ? form?.automation_action?.field_map?.email : null
+
+  const previewUpn = useMemo(() => {
+    if (!isCreateUser || !contactDomain || !firstNameFieldId) return null
+    const emailVal = emailFieldId ? (values[emailFieldId] || '') : ''
+    if (emailVal.trim()) return null
+    const firstName = values[firstNameFieldId] || ''
+    const local = firstName.toLowerCase().replace(/[^a-z0-9]/g, '')
+    if (!local) return null
+    return `${local}@${contactDomain}`
+  }, [isCreateUser, contactDomain, firstNameFieldId, emailFieldId, values])
+
+  // Suggested fallback UPN using last name initial (shown when previewUpn is taken)
+  const suggestedUpn = useMemo(() => {
+    if (!previewUpn || !lastNameFieldId) return null
+    const lastName = values[lastNameFieldId] || ''
+    const lastLocal = lastName.toLowerCase().replace(/[^a-z0-9]/g, '')
+    if (!lastLocal) return null
+    const firstName = values[firstNameFieldId] || ''
+    const firstLocal = firstName.toLowerCase().replace(/[^a-z0-9]/g, '')
+    return `${firstLocal}${lastLocal[0]}@${contactDomain}`
+  }, [previewUpn, lastNameFieldId, firstNameFieldId, contactDomain, values])
+
+  // The UPN we're actually going to use — local-part typed, full email typed, or auto-derived
+  const explicitEmail = emailFieldId ? (values[emailFieldId] || '').trim() : ''
+  const activeUpn = explicitEmail.includes('@')
+    ? explicitEmail
+    : (explicitEmail && contactDomain ? `${explicitEmail}@${contactDomain}` : previewUpn)
+
+  // Debounced real-time UPN existence check against whichever UPN is active
+  useEffect(() => {
+    if (!activeUpn) {
+      setUpnCheck({ checking: false, exists: null, checked: false })
+      return
+    }
+    setUpnCheck(prev => ({ ...prev, checking: true }))
+    clearTimeout(upnCheckTimer.current)
+    upnCheckTimer.current = setTimeout(async () => {
+      try {
+        const res = await portalFetch(`/api/portal/check-upn?upn=${encodeURIComponent(activeUpn)}&form_id=${id}`)
+        const data = await res.json()
+        setUpnCheck({ checking: false, exists: data.exists, checked: data.checked })
+      } catch {
+        setUpnCheck({ checking: false, exists: null, checked: false })
+      }
+    }, 600)
+    return () => clearTimeout(upnCheckTimer.current)
+  }, [activeUpn, id])
 
   if (loading) return <div className={styles.loadingState}>Loading…</div>
   if (!form) return <div className={styles.emptyState}>Form not found.</div>
@@ -263,6 +515,29 @@ export default function PortalServiceRequest() {
               {row.fields.map(field => renderField(field))}
             </div>
           ))}
+
+          {activeUpn && upnCheck.checking && (
+            <div className={styles.upnPreview}>
+              <span className={styles.upnPreviewIcon}>⏳</span>
+              <span>Checking availability of <strong>{activeUpn}</strong>…</span>
+            </div>
+          )}
+          {activeUpn && !upnCheck.checking && upnCheck.exists === false && (
+            <div className={styles.upnPreview}>
+              <span className={styles.upnPreviewIcon}>📧</span>
+              <span>Account will be created as <strong>{activeUpn}</strong></span>
+            </div>
+          )}
+          {activeUpn && !upnCheck.checking && upnCheck.exists === true && (
+            <div className={styles.upnPreviewTaken}>
+              <span className={styles.upnPreviewIcon}>⚠️</span>
+              <span>
+                <strong>{activeUpn}</strong> is already in use.
+                {previewUpn && suggestedUpn && <> Try <strong>{suggestedUpn}</strong> — or type a different email above.</>}
+                {(!previewUpn || !suggestedUpn) && <> Please type a different email address above.</>}
+              </span>
+            </div>
+          )}
 
           {error && <div className={styles.errorMsg}>{error}</div>}
 

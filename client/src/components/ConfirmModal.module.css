@@ -1,0 +1,57 @@
+.message {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin: 0 0 24px;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.btnCancel {
+  padding: 9px 20px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background .15s, color .15s;
+}
+
+.btnCancel:hover {
+  background: var(--bg);
+  color: var(--text-primary);
+}
+
+.btnDanger {
+  padding: 9px 20px;
+  border: none;
+  border-radius: 8px;
+  background: #DC2626;
+  color: #fff;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s;
+}
+
+.btnDanger:hover { background: #B91C1C; }
+
+.btnConfirm {
+  padding: 9px 20px;
+  border: none;
+  border-radius: 8px;
+  background: var(--accent, #4F46E5);
+  color: #fff;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s;
+}
+
+.btnConfirm:hover { background: var(--accent-hover, #4338CA); }

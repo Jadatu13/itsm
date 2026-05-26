@@ -58,6 +58,20 @@ router.post('/', async (req, res) => {
     if (org.value?.[0]?.displayName) resolvedName = org.value[0].displayName;
   } catch (_) { /* use provided name */ }
 
+  // Decode token and warn immediately if no Application permissions were consented
+  let rolesWarning = null;
+  try {
+    const parts = tokenData.access_token.split('.');
+    const claims = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+    if (!claims.roles || claims.roles.length === 0) {
+      rolesWarning =
+        'Token acquired but no Application permissions found (roles: []). ' +
+        'Graph API calls will fail with 403. ' +
+        'Fix: Entra ID → Enterprise Applications → [app] → Permissions → Grant admin consent. ' +
+        'Verify all required Application permissions show green ticks there.';
+    }
+  } catch (_) { /* ignore decode errors */ }
+
   const expiresAt = new Date(Date.now() + tokenData.expires_in * 1000);
 
   try {
@@ -68,7 +82,7 @@ router.post('/', async (req, res) => {
        RETURNING id, display_name, tenant_id, client_id, connected, connected_at, created_at`,
       [resolvedName, tenant_id, client_id, client_secret, tokenData.access_token, expiresAt]
     );
-    res.status(201).json(result.rows[0]);
+    res.status(201).json({ ...result.rows[0], ...(rolesWarning ? { warning: rolesWarning } : {}) });
   } catch (err) {
     if (err.code === '23505') {
       return res.status(409).json({ error: 'A tenant with this Tenant ID is already connected.' });
@@ -181,8 +195,23 @@ router.post('/:id/diagnose', async (req, res) => {
       writeTest = { status: patchRes.status, body: patchBody };
     }
 
+    const diagnosis = tokenInfo.roles.length === 0 ? {
+      issue: 'No application permissions (roles) found in token',
+      fix: 'Entra ID → Enterprise Applications → [your app] → Permissions → Grant admin consent. ' +
+           'All required Application permissions must show green ticks there — not just in App Registrations → API Permissions.',
+      required_permissions: [
+        'User.ReadWrite.All',
+        'Group.ReadWrite.All',
+        'Directory.ReadWrite.All',
+        'RoleManagement.ReadWrite.Directory',
+        'Mail.ReadWrite',
+        'UserAuthenticationMethod.ReadWrite.All',
+      ],
+    } : null;
+
     res.json({
       token: tokenInfo,
+      diagnosis,
       read_users: { status: usersRes.status, first_user: usersBody.value?.[0]?.userPrincipalName, error: usersBody.error },
       write_user: writeTest,
       full_error_if_any: usersBody.error || null,

@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { apiFetch } from '../utils/api'
 import styles from './ServiceCatalog.module.css'
+import ConfirmModal from '../components/ConfirmModal'
 
 // M365 automation action definitions (mirrors server/graphExecutor.js)
 const ACTION_TYPES = {
@@ -47,6 +48,224 @@ const ACTION_TYPES = {
   ]},
 }
 
+// ── Template helpers ──────────────────────────────────────────────────────────
+const uid = () => (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`)
+
+function tf(type, id, label, opts = {}) {
+  return {
+    id, type, label,
+    placeholder: opts.placeholder || '',
+    helpText: opts.helpText || '',
+    required: opts.required || false,
+    layout: opts.layout || 'full',
+    validation: { type: 'none', pattern: '', message: '' },
+    options: opts.options || [],
+    multi: opts.multi || false,
+  }
+}
+
+const TEMPLATES = [
+  {
+    key: 'add_to_group', icon: '👥', name: 'Add Users to Group / Team',
+    description: 'Add one or more staff members to an M365 Group or Teams channel.',
+    tag: 'Add User to M365 Group',
+    build: () => {
+      const f = { group_name: uid(), users: uid(), notes: uid() }
+      return {
+        name: 'Add Users to Group / Team', icon: '👥', category: 'access_permissions',
+        description: 'Add staff members to an M365 Group or Microsoft Teams channel.',
+        ticket_priority: 'medium', ticket_category: 'access_permissions',
+        ticket_subject_template: 'Add to Group — {{Group or Team Name}}',
+        requires_approval: true, enabled: true, sort_order: 0,
+        fields: [
+          tf('group_picker', f.group_name, 'Group or Team', { required: true, helpText: 'Select from your Entra ID groups and Teams' }),
+          tf('user_picker', f.users, 'Users to Add', { required: true, multi: true, helpText: 'Select one or more staff members to add' }),
+          tf('textarea', f.notes, 'Notes', { placeholder: 'Any additional context…' }),
+        ],
+        automation_action: { type: 'add_to_group', field_map: { group_name: f.group_name, user_email: f.users }, fixed_values: {} },
+      }
+    },
+  },
+  {
+    key: 'create_shared_mailbox', icon: '📧', name: 'Create Shared Mailbox',
+    description: 'Create a new shared mailbox in Exchange Online for a team or department.',
+    tag: 'Create Shared Mailbox',
+    build: () => {
+      const f = { display_name: uid(), email: uid(), purpose: uid() }
+      return {
+        name: 'Create Shared Mailbox', icon: '📧', category: 'access_permissions',
+        description: 'Request a new shared mailbox for a team, department or function.',
+        ticket_priority: 'medium', ticket_category: 'access_permissions',
+        ticket_subject_template: 'New Shared Mailbox — {{Mailbox Name}}',
+        requires_approval: true, enabled: true, sort_order: 0,
+        fields: [
+          tf('text', f.display_name, 'Mailbox Name', { required: true, layout: 'half', placeholder: 'e.g. Accounts Team', helpText: 'Display name shown in Outlook' }),
+          tf('text', f.email, 'Email Address', { required: true, layout: 'half', placeholder: 'accounts@yourdomain.com' }),
+          tf('textarea', f.purpose, 'Purpose / Description', { placeholder: 'What will this mailbox be used for?' }),
+        ],
+        automation_action: { type: 'create_shared_mailbox', field_map: { display_name: f.display_name, email: f.email }, fixed_values: {} },
+      }
+    },
+  },
+  {
+    key: 'disable_account', icon: '🚫', name: 'Disable User Account',
+    description: 'Disable an Entra ID account when a staff member leaves or goes on extended leave.',
+    tag: 'Disable User Account',
+    build: () => {
+      const f = { email: uid(), last_day: uid(), reason: uid() }
+      return {
+        name: 'Disable User Account', icon: '🚫', category: 'account_management',
+        description: 'Disable an Entra ID account for a departing or inactive staff member.',
+        ticket_priority: 'high', ticket_category: 'account_management',
+        ticket_subject_template: 'Disable Account — {{Staff Member}}',
+        requires_approval: true, enabled: true, sort_order: 0,
+        fields: [
+          tf('user_picker', f.email, 'Staff Member', { required: true, helpText: 'Select the account to disable' }),
+          tf('date', f.last_day, 'Last Working Day', { required: true, layout: 'half' }),
+          tf('textarea', f.reason, 'Reason', { required: true, placeholder: 'e.g. Resignation, termination, extended leave…' }),
+        ],
+        automation_action: { type: 'disable_account', field_map: { email: f.email }, fixed_values: {} },
+      }
+    },
+  },
+  {
+    key: 'add_mailbox_permission', icon: '📬', name: 'Grant Mailbox Access',
+    description: 'Give a staff member FullAccess, SendAs or SendOnBehalf permissions to a shared or delegated mailbox.',
+    tag: 'Add Mailbox Permission',
+    build: () => {
+      const f = { mailbox: uid(), user: uid(), permission: uid() }
+      return {
+        name: 'Grant Mailbox Access', icon: '📬', category: 'access_permissions',
+        description: 'Grant a staff member access to a shared or delegated mailbox.',
+        ticket_priority: 'medium', ticket_category: 'access_permissions',
+        ticket_subject_template: 'Mailbox Access — {{Mailbox Email}}',
+        requires_approval: true, enabled: true, sort_order: 0,
+        fields: [
+          tf('user_picker', f.mailbox, 'Mailbox', { required: true, helpText: 'Select the shared mailbox to grant access to' }),
+          tf('user_picker', f.user, 'Grant Access To', { required: true, helpText: 'Select the staff member to receive access' }),
+          tf('select', f.permission, 'What level of access do they need?', { required: true, options: [
+            { label: 'Full Access — can read, manage and delete all mail in the mailbox', value: 'FullAccess' },
+            { label: 'Send As — emails they send will appear to come from this mailbox', value: 'SendAs' },
+            { label: 'Send On Behalf — emails show as sent on behalf of this mailbox', value: 'SendOnBehalf' },
+          ]}),
+        ],
+        automation_action: { type: 'add_mailbox_permission', field_map: { mailbox_email: f.mailbox, user_email: f.user, permission_type: f.permission }, fixed_values: {} },
+      }
+    },
+  },
+  {
+    key: 'new_staff', icon: '🧑‍💼', name: 'New Staff Member',
+    description: 'Onboard a new staff member with an Entra ID account. Email is auto-generated from the submitter\'s organisation domain.',
+    tag: 'Create Entra ID User',
+    build: () => {
+      const f = { fn: uid(), ln: uid(), jt: uid(), dept: uid(), sd: uid(), email: uid(), notes: uid() }
+      return {
+        name: 'New Staff Member', icon: '🧑‍💼', category: 'account_management',
+        description: 'Request a new Entra ID user account for an incoming staff member.',
+        ticket_priority: 'medium', ticket_category: 'account_management',
+        ticket_subject_template: 'New Staff Account — {{First Name}} {{Last Name}}',
+        requires_approval: true, enabled: true, sort_order: 0,
+        fields: [
+          tf('text', f.fn, 'First Name', { required: true, layout: 'half', placeholder: 'e.g. Jane' }),
+          tf('text', f.ln, 'Last Name',  { required: true, layout: 'half', placeholder: 'e.g. Smith' }),
+          tf('text', f.jt, 'Job Title',  { layout: 'half', placeholder: 'e.g. Support Coordinator' }),
+          tf('text', f.dept, 'Department', { layout: 'half', placeholder: 'e.g. Operations' }),
+          tf('date', f.sd, 'Start Date', { required: true, layout: 'half' }),
+          tf('text', f.email, 'Email Address', { layout: 'half', placeholder: 'Leave blank to auto-generate', helpText: 'Leave blank to auto-create as firstname@yourdomain' }),
+          tf('textarea', f.notes, 'Additional Notes', { placeholder: 'Any extra details for the IT team…' }),
+        ],
+        automation_action: { type: 'create_user', field_map: { first_name: f.fn, last_name: f.ln, job_title: f.jt, department: f.dept, email: f.email }, fixed_values: {} },
+      }
+    },
+  },
+  {
+    key: 'password_reset', icon: '🔑', name: 'Password Reset',
+    description: 'Reset an Entra ID user\'s password. A temporary password is generated and the user must change it on next sign-in.',
+    tag: 'Reset User Password',
+    build: () => {
+      const f = { email: uid(), reason: uid() }
+      return {
+        name: 'Password Reset', icon: '🔑', category: 'account_management',
+        description: 'Reset an Entra ID account password for a locked-out or forgotten-password request.',
+        ticket_priority: 'high', ticket_category: 'account_management',
+        ticket_subject_template: 'Password Reset — {{Staff Member}}',
+        requires_approval: true, enabled: true, sort_order: 0,
+        fields: [
+          tf('user_picker', f.email, 'Staff Member', { required: true, helpText: 'Select the user who needs their password reset' }),
+          tf('textarea', f.reason, 'Reason', { required: true, placeholder: 'e.g. Forgot password, account locked out…' }),
+        ],
+        automation_action: { type: 'reset_password', field_map: { email: f.email }, fixed_values: {} },
+      }
+    },
+  },
+  {
+    key: 'enable_account', icon: '✅', name: 'Reactivate User Account',
+    description: 'Re-enable a previously disabled Entra ID account for a returning staff member.',
+    tag: 'Enable User Account',
+    build: () => {
+      const f = { email: uid(), reason: uid() }
+      return {
+        name: 'Reactivate User Account', icon: '✅', category: 'account_management',
+        description: 'Re-enable a previously disabled Entra ID account.',
+        ticket_priority: 'medium', ticket_category: 'account_management',
+        ticket_subject_template: 'Reactivate Account — {{Staff Member}}',
+        requires_approval: true, enabled: true, sort_order: 0,
+        fields: [
+          tf('user_picker', f.email, 'Staff Member', { required: true, helpText: 'Select the account to reactivate' }),
+          tf('textarea', f.reason, 'Reason', { required: true, placeholder: 'e.g. Returning from leave, contract renewed…' }),
+        ],
+        automation_action: { type: 'enable_account', field_map: { email: f.email }, fixed_values: {} },
+      }
+    },
+  },
+  {
+    key: 'remove_mailbox_permission', icon: '🔓', name: 'Remove Mailbox Access',
+    description: 'Revoke a staff member\'s access to a shared or delegated mailbox.',
+    tag: 'Remove Mailbox Permission',
+    build: () => {
+      const f = { mailbox: uid(), user: uid(), permission: uid() }
+      return {
+        name: 'Remove Mailbox Access', icon: '🔓', category: 'access_permissions',
+        description: 'Revoke a staff member\'s access to a shared or delegated mailbox.',
+        ticket_priority: 'medium', ticket_category: 'access_permissions',
+        ticket_subject_template: 'Remove Mailbox Access — {{Mailbox Email}}',
+        requires_approval: true, enabled: true, sort_order: 0,
+        fields: [
+          tf('user_picker', f.mailbox, 'Mailbox', { required: true, helpText: 'Select the shared mailbox to remove access from' }),
+          tf('user_picker', f.user, 'Remove Access From', { required: true, helpText: 'Select the staff member to remove' }),
+          tf('select', f.permission, 'Which access should be removed?', { required: true, options: [
+            { label: 'Full Access — read, manage and delete all mail', value: 'FullAccess' },
+            { label: 'Send As — sending as the mailbox', value: 'SendAs' },
+            { label: 'Send On Behalf — sending on behalf of the mailbox', value: 'SendOnBehalf' },
+          ]}),
+        ],
+        automation_action: { type: 'remove_mailbox_permission', field_map: { mailbox_email: f.mailbox, user_email: f.user, permission_type: f.permission }, fixed_values: {} },
+      }
+    },
+  },
+  {
+    key: 'remove_from_group', icon: '🚪', name: 'Remove Users from Group / Team',
+    description: 'Remove one or more staff members from an M365 Group or Teams channel.',
+    tag: 'Remove User from Group',
+    build: () => {
+      const f = { group_name: uid(), users: uid(), reason: uid() }
+      return {
+        name: 'Remove Users from Group / Team', icon: '🚪', category: 'access_permissions',
+        description: 'Remove staff members from an M365 Group or Microsoft Teams channel.',
+        ticket_priority: 'medium', ticket_category: 'access_permissions',
+        ticket_subject_template: 'Remove from Group — {{Group or Team Name}}',
+        requires_approval: true, enabled: true, sort_order: 0,
+        fields: [
+          tf('group_picker', f.group_name, 'Group or Team', { required: true, helpText: 'Select from your Entra ID groups and Teams' }),
+          tf('user_picker', f.users, 'Users to Remove', { required: true, multi: true, helpText: 'Select one or more staff members to remove' }),
+          tf('textarea', f.reason, 'Reason', { placeholder: 'e.g. Role change, no longer requires access…' }),
+        ],
+        automation_action: { type: 'remove_from_group', field_map: { group_name: f.group_name, user_email: f.users }, fixed_values: {} },
+      }
+    },
+  },
+]
+
 const ICONS = ['📋', '💻', '📧', '👤', '🔒', '🗂', '🖨', '📞', '🌐', '⚙️']
 const CATEGORIES = [
   { value: 'general', label: 'General' },
@@ -78,6 +297,8 @@ const PALETTE_TYPES = [
   { type: 'number', label: 'Number', icon: '🔢' },
   { type: 'select', label: 'Dropdown', icon: '🔽' },
   { type: 'radio', label: 'Radio Buttons', icon: '⚫' },
+  { type: 'user_picker', label: 'User Picker (Entra)', icon: '👥' },
+  { type: 'group_picker', label: 'Group Picker (Entra)', icon: '🏷️' },
 ]
 
 function makeField(type) {
@@ -91,6 +312,7 @@ function makeField(type) {
     layout: 'full',
     validation: { type: 'none', pattern: '', message: '' },
     options: type === 'select' || type === 'radio' ? [{ label: 'Option 1' }] : [],
+    multi: false,
   }
 }
 
@@ -465,6 +687,25 @@ function FormBuilderModal({ form, onClose, onSave }) {
                       </div>
                     )}
 
+                    {/* User picker — multi toggle */}
+                    {field.type === 'user_picker' && (
+                      <div className={styles.fieldCardRow}>
+                        <label className={styles.requiredToggle}>
+                          <input type="checkbox" checked={field.multi || false}
+                            onChange={e => updateField(field.id, { multi: e.target.checked })} />
+                          Allow multiple selections
+                        </label>
+                        <span className={styles.userPickerNote}>Fetches live users from your connected Entra ID tenant</span>
+                      </div>
+                    )}
+
+                    {/* Group picker — note */}
+                    {field.type === 'group_picker' && (
+                      <div className={styles.fieldCardRow}>
+                        <span className={styles.userPickerNote}>Fetches live groups &amp; Teams from your connected Entra ID tenant — single select</span>
+                      </div>
+                    )}
+
                     {/* Help text — always last */}
                     <div className={styles.fieldCardRow}>
                       <input className={styles.fieldSmInput}
@@ -631,14 +872,79 @@ function FormBuilderModal({ form, onClose, onSave }) {
   )
 }
 
+// ── Templates Modal ───────────────────────────────────────────────────────────
+function TemplatesModal({ onClose, onImport }) {
+  const [importing, setImporting] = useState(null)
+  const [imported, setImported] = useState(new Set())
+  const [error, setError] = useState('')
+
+  async function handleImport(template) {
+    setImporting(template.key)
+    setError('')
+    try {
+      const data = template.build()
+      const res = await apiFetch('/api/service-catalog', {
+        method: 'POST',
+        body: JSON.stringify({ ...data, automation_tenant_id: null }),
+      })
+      const saved = await res.json()
+      if (!res.ok) { setError(saved.error || 'Import failed.'); return }
+      setImported(prev => new Set([...prev, template.key]))
+      onImport(saved)
+    } catch {
+      setError('Import failed. Please try again.')
+    } finally {
+      setImporting(null)
+    }
+  }
+
+  return (
+    <div className={styles.modalOverlay} onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className={styles.templatesModal}>
+        <div className={styles.modalHeader}>
+          <div>
+            <h2 className={styles.modalTitle}>M365 Templates</h2>
+            <p className={styles.templatesSubtitle}>
+              Pre-built Entra ID service request forms. All require approval by default — assign a tenant after importing.
+            </p>
+          </div>
+          <button className={styles.modalClose} onClick={onClose}>×</button>
+        </div>
+        <div className={styles.templatesGrid}>
+          {TEMPLATES.map(t => (
+            <div key={t.key} className={`${styles.templateCard} ${imported.has(t.key) ? styles.templateCardDone : ''}`}>
+              <span className={styles.templateCardIcon}>{t.icon}</span>
+              <div className={styles.templateCardBody}>
+                <div className={styles.templateCardName}>{t.name}</div>
+                <div className={styles.templateCardDesc}>{t.description}</div>
+                <div className={styles.templateCardTag}>⚙️ {t.tag}</div>
+              </div>
+              <button
+                className={`${styles.btnImport} ${imported.has(t.key) ? styles.btnImportDone : ''}`}
+                onClick={() => !imported.has(t.key) && handleImport(t)}
+                disabled={importing === t.key || imported.has(t.key)}
+              >
+                {importing === t.key ? 'Importing…' : imported.has(t.key) ? '✓ Imported' : 'Import'}
+              </button>
+            </div>
+          ))}
+        </div>
+        {error && <p className={styles.templatesError}>{error}</p>}
+      </div>
+    </div>
+  )
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function ServiceCatalog() {
   const [forms, setForms] = useState([])
   const [submissions, setSubmissions] = useState([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('forms')
-  const [editForm, setEditForm] = useState(null)     // null = closed, {} = new, form = edit
+  const [editForm, setEditForm] = useState(null)
   const [showModal, setShowModal] = useState(false)
+  const [showTemplates, setShowTemplates] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(null) // form id to delete
 
   useEffect(() => {
     Promise.all([
@@ -669,7 +975,6 @@ export default function ServiceCatalog() {
   }
 
   async function handleDelete(id) {
-    if (!confirm('Delete this form?')) return
     await apiFetch(`/api/service-catalog/${id}`, { method: 'DELETE' })
     setForms(prev => prev.filter(f => f.id !== id))
   }
@@ -684,7 +989,10 @@ export default function ServiceCatalog() {
     <div className={styles.page}>
       <div className={styles.header}>
         <h1 className={styles.title}>Service Catalog</h1>
-        <button className={styles.btnPrimary} onClick={openNew}>+ New Form</button>
+        <div className={styles.headerActions}>
+          <button className={styles.btnSecondary} onClick={() => setShowTemplates(true)}>⚡ Templates</button>
+          <button className={styles.btnPrimary} onClick={openNew}>+ New Form</button>
+        </div>
       </div>
 
       <div className={styles.tabs}>
@@ -740,7 +1048,7 @@ export default function ServiceCatalog() {
                       {f.enabled ? 'Disable' : 'Enable'}
                     </button>
                     <button className={styles.btnIconSm} onClick={() => openEdit(f)}>Edit</button>
-                    <button className={`${styles.btnIconSm} ${styles.btnDanger}`} onClick={() => handleDelete(f.id)}>Delete</button>
+                    <button className={`${styles.btnIconSm} ${styles.btnDanger}`} onClick={() => setConfirmDelete(f.id)}>Delete</button>
                   </div>
                 </div>
               </div>
@@ -785,6 +1093,23 @@ export default function ServiceCatalog() {
           form={editForm}
           onClose={() => setShowModal(false)}
           onSave={handleSave}
+        />
+      )}
+
+      {showTemplates && (
+        <TemplatesModal
+          onClose={() => setShowTemplates(false)}
+          onImport={saved => setForms(prev => [...prev, saved])}
+        />
+      )}
+
+      {confirmDelete && (
+        <ConfirmModal
+          title="Delete form?"
+          message="This will permanently delete the form and all its configuration. Submitted requests already linked to tickets won't be affected."
+          confirmLabel="Delete form"
+          onConfirm={() => handleDelete(confirmDelete)}
+          onClose={() => setConfirmDelete(null)}
         />
       )}
     </div>

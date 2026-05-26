@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import PageHeader from '../components/PageHeader'
 import Modal from '../components/Modal'
+import ConfirmModal from '../components/ConfirmModal'
 import { formatDate } from '../utils/format'
 import { apiFetch } from '../utils/api'
 import formStyles from '../styles/forms.module.css'
@@ -641,11 +642,11 @@ function FolderModal({ folder, folders, orgs, onClose, onSaved }) {
 
 function FolderSidebar({ folders, orgs, selected, onSelect, onReload, onDropArticle }) {
   const [modalFolder, setModalFolder] = useState(undefined)
+  const [confirmFolder, setConfirmFolder] = useState(null)
   const [unfiledDrag, setUnfiledDrag] = useState(false)
   const tree = buildTree(folders)
 
   async function handleDelete(f) {
-    if (!window.confirm(`Delete "${f.name}"? Articles and sub-folders become Unfiled / top-level.`)) return
     await apiFetch(`/api/kb/folders/${f.id}`, { method: 'DELETE' })
     if (selected === f.id) onSelect('all')
     onReload()
@@ -690,7 +691,7 @@ function FolderSidebar({ folders, orgs, selected, onSelect, onReload, onDropArti
             selected={selected}
             onSelect={onSelect}
             onEdit={f => setModalFolder(f)}
-            onDelete={handleDelete}
+            onDelete={f => setConfirmFolder(f)}
             onDropArticle={onDropArticle}
           />
         ))}
@@ -703,6 +704,16 @@ function FolderSidebar({ folders, orgs, selected, onSelect, onReload, onDropArti
           orgs={orgs}
           onClose={() => setModalFolder(undefined)}
           onSaved={() => { setModalFolder(undefined); onReload() }}
+        />
+      )}
+
+      {confirmFolder && (
+        <ConfirmModal
+          title={`Delete "${confirmFolder.name}"?`}
+          message="Articles and sub-folders inside will become Unfiled. This cannot be undone."
+          confirmLabel="Delete folder"
+          onConfirm={() => handleDelete(confirmFolder)}
+          onClose={() => setConfirmFolder(null)}
         />
       )}
     </aside>

@@ -298,7 +298,7 @@ router.post('/service-catalog/:id/submit', portalAuth, async (req, res) => {
 
     // If approval not required but automation action exists, execute immediately
     if (!form.requires_approval && form.automation_action?.type && form.automation_action.type !== 'none') {
-      const { executeAutomation } = require('../graphExecutor');
+      const { executeAutomation, checkUPNExists } = require('../graphExecutor');
       const sr = srInsert.rows[0];
       executeAutomation(sr, form).then(async (result) => {
         await db.query(
@@ -318,6 +318,133 @@ router.post('/service-catalog/:id/submit', portalAuth, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to submit request' });
+  }
+});
+
+// GET /api/portal/graph/users?form_id=... — fetch live Entra ID users for user_picker fields
+router.get('/graph/users', portalAuth, async (req, res) => {
+  const { form_id } = req.query;
+  try {
+    let tenant = null;
+    if (form_id) {
+      const fr = await db.query('SELECT automation_tenant_id FROM service_request_forms WHERE id = $1', [form_id]);
+      const tenantId = fr.rows[0]?.automation_tenant_id;
+      if (tenantId) {
+        const tr = await db.query('SELECT * FROM m365_tenants WHERE id = $1 AND connected = true', [tenantId]);
+        tenant = tr.rows[0] || null;
+      }
+    }
+    if (!tenant) {
+      const tr = await db.query('SELECT * FROM m365_tenants WHERE connected = true ORDER BY created_at ASC LIMIT 1');
+      tenant = tr.rows[0] || null;
+    }
+    if (!tenant) return res.json({ users: [], connected: false });
+
+    const tokenUrl = `https://login.microsoftonline.com/${tenant.tenant_id}/oauth2/v2.0/token`;
+    const body = new URLSearchParams({
+      grant_type: 'client_credentials', client_id: tenant.client_id,
+      client_secret: tenant.client_secret, scope: 'https://graph.microsoft.com/.default',
+    });
+    const tokenRes = await fetch(tokenUrl, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: body.toString() });
+    if (!tokenRes.ok) return res.json({ users: [], connected: false });
+    const { access_token } = await tokenRes.json();
+
+    const usersRes = await fetch(
+      'https://graph.microsoft.com/v1.0/users?$select=displayName,userPrincipalName&$top=999&$orderby=displayName',
+      { headers: { Authorization: `Bearer ${access_token}` } }
+    );
+    if (!usersRes.ok) return res.json({ users: [], connected: true });
+    const { value = [] } = await usersRes.json();
+
+    const users = value
+      .filter(u => u.userPrincipalName && !u.userPrincipalName.startsWith('#EXT#'))
+      .map(u => ({ name: u.displayName, email: u.userPrincipalName }));
+
+    res.json({ users, connected: true });
+  } catch (err) {
+    console.error('[graph/users]', err.message);
+    res.json({ users: [], connected: false });
+  }
+});
+
+// GET /api/portal/graph/groups?form_id=... — fetch live Entra ID groups for group_picker fields
+router.get('/graph/groups', portalAuth, async (req, res) => {
+  const { form_id } = req.query;
+  try {
+    let tenant = null;
+    if (form_id) {
+      const fr = await db.query('SELECT automation_tenant_id FROM service_request_forms WHERE id = $1', [form_id]);
+      const tenantId = fr.rows[0]?.automation_tenant_id;
+      if (tenantId) {
+        const tr = await db.query('SELECT * FROM m365_tenants WHERE id = $1 AND connected = true', [tenantId]);
+        tenant = tr.rows[0] || null;
+      }
+    }
+    if (!tenant) {
+      const tr = await db.query('SELECT * FROM m365_tenants WHERE connected = true ORDER BY created_at ASC LIMIT 1');
+      tenant = tr.rows[0] || null;
+    }
+    if (!tenant) return res.json({ groups: [], connected: false });
+
+    const tokenUrl = `https://login.microsoftonline.com/${tenant.tenant_id}/oauth2/v2.0/token`;
+    const body = new URLSearchParams({
+      grant_type: 'client_credentials', client_id: tenant.client_id,
+      client_secret: tenant.client_secret, scope: 'https://graph.microsoft.com/.default',
+    });
+    const tokenRes = await fetch(tokenUrl, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: body.toString() });
+    if (!tokenRes.ok) return res.json({ groups: [], connected: false });
+    const { access_token } = await tokenRes.json();
+
+    const groupsRes = await fetch(
+      'https://graph.microsoft.com/v1.0/groups?$select=id,displayName&$top=999&$orderby=displayName',
+      { headers: { Authorization: `Bearer ${access_token}` } }
+    );
+    if (!groupsRes.ok) return res.json({ groups: [], connected: true });
+    const { value = [] } = await groupsRes.json();
+
+    const groups = value
+      .filter(g => g.displayName)
+      .map(g => ({ id: g.id, name: g.displayName }));
+
+    res.json({ groups, connected: true });
+  } catch (err) {
+    console.error('[graph/groups]', err.message);
+    res.json({ groups: [], connected: false });
+  }
+});
+
+// GET /api/portal/check-upn?upn=...&form_id=... — real-time UPN availability check
+router.get('/check-upn', portalAuth, async (req, res) => {
+  const { upn, form_id } = req.query;
+  if (!upn) return res.status(400).json({ error: 'upn is required' });
+
+  try {
+    // Find the tenant — prefer the form's pinned tenant, fall back to first connected
+    let tenant = null;
+    if (form_id) {
+      const fr = await db.query(
+        'SELECT automation_tenant_id FROM service_request_forms WHERE id = $1',
+        [form_id]
+      );
+      const tenantId = fr.rows[0]?.automation_tenant_id;
+      if (tenantId) {
+        const tr = await db.query('SELECT * FROM m365_tenants WHERE id = $1 AND connected = true', [tenantId]);
+        tenant = tr.rows[0] || null;
+      }
+    }
+    if (!tenant) {
+      const tr = await db.query('SELECT * FROM m365_tenants WHERE connected = true ORDER BY created_at ASC LIMIT 1');
+      tenant = tr.rows[0] || null;
+    }
+
+    if (!tenant) return res.json({ exists: false, checked: false });
+
+    const { checkUPNExists } = require('../graphExecutor');
+    const exists = await checkUPNExists(tenant, upn);
+    res.json({ exists, checked: true });
+  } catch (err) {
+    console.error('[check-upn]', err.message);
+    res.json({ exists: false, checked: false }); // fail open — don't block submission
   }
 });
 

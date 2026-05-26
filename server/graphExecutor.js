@@ -14,13 +14,13 @@ const ACTION_TYPES = {
   create_user: {
     label: 'Create Entra ID User',
     params: [
-      { key: 'first_name',    label: 'First Name',        required: true  },
-      { key: 'last_name',     label: 'Last Name',         required: true  },
-      { key: 'email',         label: 'Email / UPN',       required: true  },
-      { key: 'display_name',  label: 'Display Name',      required: false },
-      { key: 'job_title',     label: 'Job Title',         required: false },
-      { key: 'department',    label: 'Department',        required: false },
-      { key: 'license_sku',   label: 'License SKU',       required: false },
+      { key: 'first_name',    label: 'First Name',                          required: true  },
+      { key: 'last_name',     label: 'Last Name',                           required: true  },
+      { key: 'email',         label: 'Email / UPN (blank = auto-derive)',   required: false },
+      { key: 'display_name',  label: 'Display Name',                        required: false },
+      { key: 'job_title',     label: 'Job Title',                           required: false },
+      { key: 'department',    label: 'Department',                          required: false },
+      { key: 'license_sku',   label: 'License SKU',                         required: false },
     ],
   },
   reset_password: {
@@ -82,6 +82,41 @@ const ACTION_TYPES = {
 
 module.exports.ACTION_TYPES = ACTION_TYPES;
 
+// ── UPN helpers ───────────────────────────────────────────────────────────────
+async function checkUPNExists(tenant, upn) {
+  const token = await getFreshToken(tenant);
+  const res = await fetch(
+    `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(upn)}?$select=id`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  return res.status !== 404;
+}
+
+async function resolveUPN(tenant, firstName, lastName, domain, push) {
+  const firstLocal = firstName.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const lastLocal = (lastName || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (!firstLocal) throw new Error('Cannot derive UPN: first name contains no valid characters.');
+
+  // Try firstname@domain first
+  if (!(await checkUPNExists(tenant, `${firstLocal}@${domain}`))) return `${firstLocal}@${domain}`;
+  push('info', `UPN ${firstLocal}@${domain} already exists — trying with last name initial`);
+
+  // Try firstname + progressive letters of last name (jane → janed → janedo → janedoe)
+  for (let i = 1; i <= lastLocal.length; i++) {
+    const candidate = `${firstLocal}${lastLocal.slice(0, i)}@${domain}`;
+    if (!(await checkUPNExists(tenant, candidate))) {
+      push('info', `Using ${candidate}`);
+      return candidate;
+    }
+    push('info', `UPN ${candidate} also exists, trying more letters…`);
+  }
+
+  throw new Error(
+    `Could not find an available UPN for ${firstLocal}@${domain} — all variants up to ` +
+    `${firstLocal}${lastLocal}@${domain} are taken. Please specify an email address manually.`
+  );
+}
+
 // ── Token helper ──────────────────────────────────────────────────────────────
 // Always fetches a fresh token for real executions — never trust a cached token
 // for actual Graph API calls, as permissions may have changed since it was issued.
@@ -142,6 +177,13 @@ async function graphCall(tenant, method, path, body = null) {
     const msg = data?.error?.message || text;
     const code = data?.error?.code ? ` [${data.error.code}]` : '';
     const inner = data?.error?.innerError?.message ? ` | inner: ${data.error.innerError.message}` : '';
+    if (res.status === 403) {
+      throw new Error(
+        `Graph API error (403)${code}: ${msg}${inner} — ` +
+        `Application permissions are likely missing from the service principal. ` +
+        `Fix: Entra ID → Enterprise Applications → [app] → Permissions → Grant admin consent.`
+      );
+    }
     throw new Error(`Graph API error (${res.status})${code}: ${msg}${inner}`);
   }
   return data;
@@ -164,7 +206,7 @@ function resolveParams(automationAction, fieldValues, fields) {
 }
 
 // ── Mock execution (no live tenant) ──────────────────────────────────────────
-function mockExecute(actionType, params) {
+function mockExecute(actionType, params, contactEmail = null) {
   const ts = () => new Date().toISOString();
   const log = [];
   const push = (level, message) => log.push({ time: ts(), level, message });
@@ -183,15 +225,20 @@ function mockExecute(actionType, params) {
   push('warning', '─────────────────────────────────────');
 
   switch (actionType) {
-    case 'create_user':
+    case 'create_user': {
+      const mockDomain = contactEmail?.split('@')[1];
+      const mockLocal = params.first_name?.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const mockUpn = params.email || (mockLocal && mockDomain ? `${mockLocal}@${mockDomain}` : '(email required)');
+      if (!params.email && mockDomain) push('info', `Auto-derived UPN from submitter domain: ${mockDomain}`);
       push('info', `[SIMULATION] Would POST /users with:`);
       push('info', `   displayName: ${params.display_name || `${params.first_name} ${params.last_name}`}`);
-      push('info', `   userPrincipalName: ${params.email}`);
+      push('info', `   userPrincipalName: ${mockUpn}`);
       push('info', `   givenName: ${params.first_name} | surname: ${params.last_name}`);
       if (params.job_title)  push('info', `   jobTitle: ${params.job_title}`);
       if (params.department) push('info', `   department: ${params.department}`);
       if (params.license_sku) push('info', `   [Would then assign license: ${params.license_sku}]`);
       break;
+    }
     case 'reset_password':
       push('info', `[SIMULATION] Would PATCH /users/${params.email} with new temporary password`);
       push('info', `   forceChangePasswordNextSignIn: true`);
@@ -232,7 +279,7 @@ function mockExecute(actionType, params) {
 }
 
 // ── Live execution ────────────────────────────────────────────────────────────
-async function liveExecute(tenant, actionType, params) {
+async function liveExecute(tenant, actionType, params, contactEmail = null) {
   const ts = () => new Date().toISOString();
   const log = [];
   const push = (level, message) => log.push({ time: ts(), level, message });
@@ -243,6 +290,30 @@ async function liveExecute(tenant, actionType, params) {
   try {
     switch (actionType) {
       case 'create_user': {
+        // Resolve UPN — handles three cases:
+        //   1. blank email + contact domain → derive from first name
+        //   2. local-part only (no @) + contact domain → append domain
+        //   3. full email with @ → use as-is
+        if ((!params.email || !params.email.includes('@')) && contactEmail) {
+          const domain = contactEmail.split('@')[1];
+          if (params.email && !params.email.includes('@')) {
+            // Local part typed in the split input — append domain, check conflict
+            const localPart = params.email.toLowerCase().replace(/[^a-z0-9._-]/g, '');
+            const candidate = `${localPart}@${domain}`;
+            if (await checkUPNExists(tenant, candidate)) {
+              throw new Error(`${candidate} is already taken. Please choose a different email address.`);
+            }
+            params.email = candidate;
+            push('info', `UPN from typed local part: ${params.email}`);
+          } else {
+            push('info', `No email provided — auto-deriving UPN from submitter domain: ${domain}`);
+            params.email = await resolveUPN(tenant, params.first_name, params.last_name, domain, push);
+          }
+        } else if (!params.email) {
+          throw new Error('Email/UPN is required. No email was provided and the submitter domain could not be determined.');
+        }
+        push('info', `UPN: ${params.email}`);
+
         const userBody = {
           accountEnabled: true,
           displayName: params.display_name || `${params.first_name} ${params.last_name}`,
@@ -334,29 +405,35 @@ async function liveExecute(tenant, actionType, params) {
         if (!group) throw new Error(`Group "${params.group_name}" not found.`);
         push('info', `Found group: ${group.displayName} (${group.id})`);
 
-        const users = await graphCall(tenant, 'GET', `/users?$filter=userPrincipalName eq '${encodeURIComponent(params.user_email)}'&$select=id`);
-        const user = users.value?.[0];
-        if (!user) throw new Error(`User "${params.user_email}" not found.`);
-
-        await graphCall(tenant, 'POST', `/groups/${group.id}/members/$ref`, {
-          '@odata.id': `https://graph.microsoft.com/v1.0/users/${user.id}`,
-        });
-        push('success', `✅ ${params.user_email} added to ${group.displayName}.`);
+        const addEmails = Array.isArray(params.user_email) ? params.user_email : [params.user_email].filter(Boolean);
+        if (!addEmails.length) throw new Error('No users specified.');
+        for (const email of addEmails) {
+          const ur = await graphCall(tenant, 'GET', `/users?$filter=userPrincipalName eq '${encodeURIComponent(email)}'&$select=id`);
+          const u = ur.value?.[0];
+          if (!u) { push('warning', `⚠️ User "${email}" not found — skipped.`); continue; }
+          await graphCall(tenant, 'POST', `/groups/${group.id}/members/$ref`, {
+            '@odata.id': `https://graph.microsoft.com/v1.0/users/${u.id}`,
+          });
+          push('success', `✅ ${email} added to ${group.displayName}.`);
+        }
         break;
       }
 
       case 'remove_from_group': {
         push('info', `Looking up group: ${params.group_name}`);
-        const groups = await graphCall(tenant, 'GET', `/groups?$filter=displayName eq '${encodeURIComponent(params.group_name)}'&$select=id,displayName`);
-        const group = groups.value?.[0];
-        if (!group) throw new Error(`Group "${params.group_name}" not found.`);
+        const rgroups = await graphCall(tenant, 'GET', `/groups?$filter=displayName eq '${encodeURIComponent(params.group_name)}'&$select=id,displayName`);
+        const rgroup = rgroups.value?.[0];
+        if (!rgroup) throw new Error(`Group "${params.group_name}" not found.`);
 
-        const users = await graphCall(tenant, 'GET', `/users?$filter=userPrincipalName eq '${encodeURIComponent(params.user_email)}'&$select=id`);
-        const user = users.value?.[0];
-        if (!user) throw new Error(`User "${params.user_email}" not found.`);
-
-        await graphCall(tenant, 'DELETE', `/groups/${group.id}/members/${user.id}/$ref`);
-        push('success', `✅ ${params.user_email} removed from ${group.displayName}.`);
+        const removeEmails = Array.isArray(params.user_email) ? params.user_email : [params.user_email].filter(Boolean);
+        if (!removeEmails.length) throw new Error('No users specified.');
+        for (const email of removeEmails) {
+          const ur = await graphCall(tenant, 'GET', `/users?$filter=userPrincipalName eq '${encodeURIComponent(email)}'&$select=id`);
+          const u = ur.value?.[0];
+          if (!u) { push('warning', `⚠️ User "${email}" not found — skipped.`); continue; }
+          await graphCall(tenant, 'DELETE', `/groups/${rgroup.id}/members/${u.id}/$ref`);
+          push('success', `✅ ${email} removed from ${rgroup.displayName}.`);
+        }
         break;
       }
 
@@ -419,11 +496,20 @@ async function executeAutomation(serviceRequest, form) {
     }
   } catch (_) { /* table may not exist yet */ }
 
-  if (!tenant) {
-    return mockExecute(automationAction.type, params);
+  // Fetch submitting contact's email so the domain can be used for UPN auto-derivation
+  let contactEmail = null;
+  if (serviceRequest.contact_id) {
+    try {
+      const cr = await db.query('SELECT email FROM contacts WHERE id = $1', [serviceRequest.contact_id]);
+      contactEmail = cr.rows[0]?.email || null;
+    } catch (_) {}
   }
 
-  return liveExecute(tenant, automationAction.type, params);
+  if (!tenant) {
+    return mockExecute(automationAction.type, params, contactEmail);
+  }
+
+  return liveExecute(tenant, automationAction.type, params, contactEmail);
 }
 
-module.exports = { executeAutomation, ACTION_TYPES };
+module.exports = { executeAutomation, ACTION_TYPES, checkUPNExists };

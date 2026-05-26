@@ -326,6 +326,36 @@
 }
 .btnRejectCard:hover { background: #FEF2F2; border-color: #DC2626; }
 
+/* Rerun bar */
+.rerunBar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
+}
+
+.btnRerun {
+  background: none;
+  border: 1px solid #6366F1;
+  color: #6366F1;
+  padding: 7px 16px;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+.btnRerun:hover:not(:disabled) { background: #EEF2FF; }
+.btnRerun:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.rerunHint {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
 /* Reject modal */
 .overlay {
   position: fixed;

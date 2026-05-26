@@ -262,6 +262,86 @@ router.post('/submissions/:id/approve', async (req, res) => {
   }
 });
 
+// POST /submissions/:id/rerun — re-execute a failed automation
+router.post('/submissions/:id/rerun', async (req, res) => {
+  const agentId = req.agent?.id;
+  try {
+    const r = await db.query('SELECT * FROM service_requests WHERE id = $1', [req.params.id]);
+    if (!r.rows.length) return res.status(404).json({ error: 'Request not found' });
+    const serviceRequest = r.rows[0];
+
+    if (serviceRequest.execution_status !== 'failed') {
+      return res.status(400).json({ error: 'Only failed executions can be rerun.' });
+    }
+
+    const agentResult = await db.query('SELECT name FROM agents WHERE id = $1', [agentId]);
+    const agentName = agentResult.rows[0]?.name || 'Admin';
+
+    const rerunEntry = [{ level: 'info', message: `↩ Rerun requested by ${agentName}`, time: new Date().toISOString() }];
+
+    const sr = await db.query(
+      `UPDATE service_requests
+       SET execution_status = 'executing', execution_log = execution_log || $1::jsonb
+       WHERE id = $2 RETURNING *`,
+      [JSON.stringify(rerunEntry), req.params.id]
+    );
+
+    if (serviceRequest.ticket_id) {
+      await db.query(
+        `INSERT INTO ticket_replies (ticket_id, body, is_agent_reply, is_internal, sender_name)
+         VALUES ($1, $2, true, true, $3)`,
+        [serviceRequest.ticket_id, `↩ Automation rerun requested by ${agentName}.`, agentName]
+      );
+    }
+
+    res.json({ ...sr.rows[0] });
+
+    try {
+      const formResult = await db.query('SELECT * FROM service_request_forms WHERE id = $1', [serviceRequest.form_id]);
+      const form = formResult.rows[0];
+      const result = await executeAutomation(serviceRequest, form);
+
+      const finalStatus = result.success ? 'completed' : 'failed';
+      await db.query(
+        `UPDATE service_requests
+         SET execution_status = $1, execution_log = execution_log || $2::jsonb
+         WHERE id = $3`,
+        [finalStatus, JSON.stringify(result.log), serviceRequest.id]
+      );
+
+      if (serviceRequest.ticket_id) {
+        const successLines = result.log.filter(l => l.level === 'success').map(l => l.message).join('\n');
+        const summary = result.mock
+          ? `🔌 Rerun simulation complete (no M365 tenant connected).`
+          : result.success
+            ? `✅ Automation rerun succeeded.\n${successLines}`
+            : `❌ Automation rerun failed: ${result.error}\nCheck the execution log for details.`;
+        await db.query(
+          `INSERT INTO ticket_replies (ticket_id, body, is_agent_reply, is_internal, sender_name)
+           VALUES ($1, $2, true, true, $3)`,
+          [serviceRequest.ticket_id, summary, agentName]
+        );
+        if (result.success && !result.mock) {
+          await db.query(
+            `UPDATE tickets SET status = 'resolved', updated_at = NOW() WHERE id = $1`,
+            [serviceRequest.ticket_id]
+          );
+        }
+      }
+    } catch (execErr) {
+      console.error('[rerun] Execution error:', execErr);
+      const errEntry = [{ level: 'error', message: execErr.message, time: new Date().toISOString() }];
+      await db.query(
+        `UPDATE service_requests SET execution_status = 'failed', execution_log = execution_log || $1::jsonb WHERE id = $2`,
+        [JSON.stringify(errEntry), serviceRequest.id]
+      );
+    }
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to rerun request' });
+  }
+});
+
 // POST /submissions/:id/reject
 router.post('/submissions/:id/reject', async (req, res) => {
   const { reason } = req.body;

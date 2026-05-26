@@ -1021,3 +1021,186 @@
 @media (max-width: 600px) {
   .fieldRowPair { grid-template-columns: 1fr; }
 }
+
+/* ── Split email input ───────────────────────────────────────────────── */
+.splitEmailWrap {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--border, #E5E7EB);
+  border-radius: 10px;
+  overflow: hidden;
+  background: #fff;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.splitEmailWrap:focus-within {
+  border-color: var(--accent, #4F7FFF);
+  box-shadow: 0 0 0 3px rgba(79, 127, 255, 0.12);
+}
+.splitEmailLocal {
+  flex: 1;
+  border: none;
+  outline: none;
+  padding: 11px 14px;
+  font-size: 15px;
+  background: transparent;
+  color: var(--text-primary, #111);
+  min-width: 0;
+}
+.splitEmailDomain {
+  padding: 11px 14px 11px 0;
+  font-size: 15px;
+  color: var(--text-secondary, #6B7280);
+  white-space: nowrap;
+  user-select: none;
+}
+
+/* ── UPN auto-derive preview ─────────────────────────────────────────── */
+.upnPreview {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #EFF6FF;
+  border: 1px solid #BFDBFE;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  font-size: 13.5px;
+  color: #1E40AF;
+}
+
+.upnPreviewIcon {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.upnPreviewTaken {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: #FFF7ED;
+  border: 1px solid #FED7AA;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  font-size: 13.5px;
+  color: #92400E;
+}
+
+/* ── User picker (Entra ID live search) ──────────────────────────────── */
+.userPickerWrap {
+  position: relative;
+}
+
+.userPickerTags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.userPickerTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #EEF2FF;
+  color: #4F46E5;
+  border-radius: 99px;
+  padding: 3px 10px 3px 12px;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.userPickerTagRemove {
+  background: none;
+  border: none;
+  color: #6366F1;
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0;
+  display: flex;
+  align-items: center;
+}
+
+.userPickerTagRemove:hover { color: #DC2626; }
+
+.userPickerSearch {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--portal-border);
+  border-radius: 8px;
+  font-size: 0.9rem;
+  color: var(--portal-text);
+  background: #FAFAFA;
+  box-sizing: border-box;
+  outline: none;
+  font-family: inherit;
+  transition: border .15s;
+}
+
+.userPickerSearch:focus { border-color: var(--portal-accent); background: #fff; }
+
+.userPickerList {
+  position: absolute;
+  left: 0; right: 0;
+  top: calc(100% + 4px);
+  background: #fff;
+  border: 1px solid var(--portal-border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.1);
+  max-height: 240px;
+  overflow-y: auto;
+  z-index: 200;
+}
+
+.userPickerItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  cursor: pointer;
+  transition: background .1s;
+  border-bottom: 1px solid #F3F4F6;
+}
+
+.userPickerItem:last-child { border-bottom: none; }
+
+.userPickerItem:hover { background: #F5F3FF; }
+
+.userPickerItemSelected { background: #EEF2FF; }
+.userPickerItemSelected:hover { background: #E0E7FF; }
+
+.userPickerItemInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.userPickerItemName {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--portal-text);
+}
+
+.userPickerItemEmail {
+  font-size: 0.775rem;
+  color: var(--portal-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.userPickerCheck {
+  color: var(--portal-accent);
+  font-weight: 700;
+  flex-shrink: 0;
+  margin-left: 8px;
+}
+
+.userPickerEmpty {
+  padding: 14px;
+  font-size: 0.875rem;
+  color: var(--portal-text-muted);
+  text-align: center;
+}

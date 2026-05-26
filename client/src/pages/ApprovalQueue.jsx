@@ -92,9 +92,10 @@ function resolveFieldValues(rawValues, formFields) {
     })
 }
 
-function RequestCard({ request, onApprove, onReject, onRefresh }) {
+function RequestCard({ request, onApprove, onReject, onRerun, onRefresh }) {
   const [expanded, setExpanded] = useState(false)
   const [approving, setApproving] = useState(false)
+  const [rerunning, setRerunning] = useState(false)
 
   const resolvedFields = resolveFieldValues(request.field_values, request.form_fields)
   const automationAction = request.automation_action
@@ -104,6 +105,12 @@ function RequestCard({ request, onApprove, onReject, onRefresh }) {
     setApproving(true)
     await onApprove(request.id)
     setApproving(false)
+  }
+
+  async function handleRerun() {
+    setRerunning(true)
+    await onRerun(request.id)
+    setRerunning(false)
   }
 
   return (
@@ -182,6 +189,20 @@ function RequestCard({ request, onApprove, onReject, onRefresh }) {
           </button>
         </div>
       )}
+
+      {/* Rerun button for failed executions */}
+      {request.execution_status === 'failed' && request.approval_status !== 'pending' && (
+        <div className={styles.rerunBar}>
+          <button
+            className={styles.btnRerun}
+            onClick={handleRerun}
+            disabled={rerunning}
+          >
+            {rerunning ? '⏳ Rerunning…' : '↩ Rerun Automation'}
+          </button>
+          <span className={styles.rerunHint}>Re-executes the automation using the original submitted values.</span>
+        </div>
+      )}
     </div>
   )
 }
@@ -234,6 +255,15 @@ export default function ApprovalQueue() {
     setSubmissions(prev => prev.map(s =>
       s.id === id ? { ...s, approval_status: 'rejected', rejection_reason: reason } : s
     ))
+  }
+
+  async function handleRerun(id) {
+    await apiFetch(`/api/service-catalog/submissions/${id}/rerun`, { method: 'POST' })
+    setSubmissions(prev => prev.map(s =>
+      s.id === id ? { ...s, execution_status: 'executing' } : s
+    ))
+    setTimeout(load, 2000)
+    setTimeout(load, 5000)
   }
 
   const pending = submissions.filter(s => s.approval_status === 'pending')
@@ -290,6 +320,7 @@ export default function ApprovalQueue() {
               request={req}
               onApprove={handleApprove}
               onReject={setRejectTarget}
+              onRerun={handleRerun}
               onRefresh={load}
             />
           ))}

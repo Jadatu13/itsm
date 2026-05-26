@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { apiFetch } from '../utils/api'
 import styles from './M365Tenants.module.css'
+import ConfirmModal from '../components/ConfirmModal'
 
 function formatDate(d) {
   if (!d) return '—'
@@ -194,6 +195,7 @@ export default function M365Tenants() {
   const [tenants, setTenants] = useState([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
+  const [confirmDisconnect, setConfirmDisconnect] = useState(null) // tenant to disconnect
   const [testing, setTesting] = useState(null)
   const [testResult, setTestResult] = useState({})
 
@@ -229,7 +231,6 @@ export default function M365Tenants() {
   }
 
   async function handleDelete(id) {
-    if (!confirm('Disconnect this tenant? Automation actions for this tenant will stop working.')) return
     await apiFetch(`/api/tenants/${id}`, { method: 'DELETE' })
     setTenants(prev => prev.filter(t => t.id !== id))
   }
@@ -316,7 +317,7 @@ export default function M365Tenants() {
                 </button>
                 <button
                   className={`${styles.btnSm} ${styles.btnDanger}`}
-                  onClick={() => handleDelete(t.id)}
+                  onClick={() => setConfirmDisconnect(t)}
                 >
                   Disconnect
                 </button>
@@ -330,6 +331,16 @@ export default function M365Tenants() {
         <ConnectModal
           onClose={() => setShowModal(false)}
           onConnected={handleConnected}
+        />
+      )}
+
+      {confirmDisconnect && (
+        <ConfirmModal
+          title="Disconnect tenant?"
+          message={`This will remove the connection to ${confirmDisconnect.display_name}. Any automation actions configured for this tenant will stop working until reconnected.`}
+          confirmLabel="Disconnect"
+          onConfirm={() => handleDelete(confirmDisconnect.id)}
+          onClose={() => setConfirmDisconnect(null)}
         />
       )}
     </div>

@@ -1,0 +1,408 @@
+.page {
+  padding: 32px;
+  max-width: 900px;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 24px;
+}
+
+.title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 4px;
+}
+
+.subtitle {
+  font-size: 13.5px;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.refreshBtn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  padding: 7px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+.refreshBtn:hover:not(:disabled) { background: var(--bg); color: var(--text-primary); }
+.refreshBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Tabs */
+.tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 24px;
+}
+
+.tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 10px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: -1px;
+  transition: color 0.15s;
+}
+.tab:hover { color: var(--text-primary); }
+.tabActive {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+}
+
+.tabBadge {
+  background: #EEF2FF;
+  color: #4F46E5;
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 10px;
+}
+
+.empty {
+  color: var(--text-secondary);
+  font-size: 14px;
+  padding: 40px 0;
+  text-align: center;
+}
+
+/* Cards */
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.card {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px;
+  transition: box-shadow 0.15s;
+}
+
+.cardPending {
+  border-left: 3px solid #F59E0B;
+}
+
+.card:hover {
+  box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+}
+
+.cardHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.cardLeft {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.formIcon {
+  font-size: 24px;
+  line-height: 1;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.cardTitle {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.cardMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  align-items: center;
+}
+
+.contactName {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.contactEmail {
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.submittedAt {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.cardRight {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.ticketRef {
+  font-family: 'SF Mono', 'Fira Mono', monospace;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+  background: #EEF2FF;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.badge {
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 10px;
+}
+
+.actionBadge {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: #6366F1;
+  background: #EEF2FF;
+  padding: 3px 10px;
+  border-radius: 10px;
+}
+
+/* Field values */
+.fieldValues {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 6px 20px;
+  background: var(--bg);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+}
+
+.fieldRow {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.fieldKey {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  flex-shrink: 0;
+  min-width: 100px;
+}
+
+.noFields {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.fieldVal {
+  font-size: 13.5px;
+  color: var(--text-primary);
+}
+
+/* Rejection note */
+.rejectionNote {
+  font-size: 13px;
+  color: #DC2626;
+  background: #FEF2F2;
+  border: 1px solid #FECACA;
+  border-radius: 6px;
+  padding: 10px 14px;
+  margin-bottom: 10px;
+}
+
+/* Execution log */
+.logToggle {
+  background: none;
+  border: 1px solid var(--border);
+  padding: 5px 12px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  margin-bottom: 8px;
+  transition: all 0.12s;
+}
+.logToggle:hover { background: var(--bg); color: var(--text-primary); }
+
+.logViewer {
+  background: #0F172A;
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin-bottom: 12px;
+  max-height: 280px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.logEntry {
+  display: flex;
+  gap: 10px;
+  font-family: 'SF Mono', 'Fira Mono', 'Consolas', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.logTime {
+  color: #64748B;
+  flex-shrink: 0;
+}
+
+.logMsg {
+  color: #CBD5E1;
+}
+
+.logEntry_success .logMsg { color: #4ADE80; }
+.logEntry_error   .logMsg { color: #F87171; }
+.logEntry_warning .logMsg { color: #FCD34D; }
+.logEntry_info    .logMsg { color: #93C5FD; }
+
+/* Action buttons */
+.cardActions {
+  display: flex;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
+}
+
+.btnApprove {
+  background: #059669;
+  color: #fff;
+  border: none;
+  padding: 9px 20px;
+  border-radius: 7px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btnApprove:hover:not(:disabled) { background: #047857; }
+.btnApprove:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.btnRejectCard {
+  background: none;
+  border: 1px solid #FECACA;
+  color: #DC2626;
+  padding: 9px 20px;
+  border-radius: 7px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.btnRejectCard:hover { background: #FEF2F2; border-color: #DC2626; }
+
+/* Reject modal */
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.rejectModal {
+  background: var(--white);
+  border-radius: 12px;
+  padding: 28px 32px;
+  width: 480px;
+  max-width: calc(100vw - 32px);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.18);
+}
+
+.rejectTitle {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 8px;
+}
+
+.rejectSub {
+  font-size: 13.5px;
+  color: var(--text-secondary);
+  margin: 0 0 16px;
+  line-height: 1.5;
+}
+
+.rejectReason {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 14px;
+  font-family: inherit;
+  resize: vertical;
+  color: var(--text-primary);
+  margin-bottom: 16px;
+}
+.rejectReason:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(79,127,255,0.1); }
+
+.rejectActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.btnSecondary {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  padding: 9px 18px;
+  border-radius: 7px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.btnSecondary:hover { background: var(--bg); color: var(--text-primary); }
+
+.btnReject {
+  background: #DC2626;
+  color: #fff;
+  border: none;
+  padding: 9px 20px;
+  border-radius: 7px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btnReject:hover:not(:disabled) { background: #B91C1C; }
+.btnReject:disabled { opacity: 0.5; cursor: not-allowed; }

@@ -1,0 +1,438 @@
+/* ── Page shell ───────────────────────────────────────────────────────── */
+.page {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.state {
+  padding: 40px 32px;
+  color: var(--text-secondary);
+}
+
+/* ── Two-column layout ────────────────────────────────────────────────── */
+.layout {
+  display: grid;
+  grid-template-columns: 480px 1fr;
+  gap: 32px;
+  padding: 24px 32px;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .layout { grid-template-columns: 1fr; }
+}
+
+/* ── Settings panel ───────────────────────────────────────────────────── */
+.settingsPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+/* ── Section ──────────────────────────────────────────────────────────── */
+.section {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.sectionTitle {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 4px;
+}
+
+/* ── Form fields ──────────────────────────────────────────────────────── */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.optional {
+  font-weight: 400;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.input,
+.select {
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--text-primary);
+  background: var(--white);
+  transition: border-color 0.15s;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.input:focus,
+.select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(79,127,255,0.12);
+}
+
+.logoPreview {
+  height: 40px;
+  object-fit: contain;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 8px;
+  background: #F8F9FB;
+  display: none;
+}
+
+/* ── Colour rows ──────────────────────────────────────────────────────── */
+.colorRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.colorLabel {
+  font-size: 13px;
+  color: var(--text-primary);
+  flex: 1;
+}
+
+.colorInputs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.colorSwatch {
+  width: 36px;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2px;
+  cursor: pointer;
+  background: none;
+}
+
+.colorHex {
+  width: 88px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: monospace;
+  color: var(--text-primary);
+  background: var(--white);
+}
+
+.colorHex:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* ── Buttons ──────────────────────────────────────────────────────────── */
+.btnPrimary {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  padding: 9px 20px;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.btnPrimary:hover:not(:disabled) { background: var(--accent-hover); }
+.btnPrimary:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.btnSecondary {
+  background: none;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  padding: 9px 20px;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btnSecondary:hover { background: var(--bg); color: var(--text-primary); }
+
+/* ── Messages ─────────────────────────────────────────────────────────── */
+.successMsg {
+  padding: 10px 14px;
+  background: #D1FAE5;
+  border: 1px solid #6EE7B7;
+  border-radius: 8px;
+  color: #065F46;
+  font-size: 13px;
+}
+
+.errorMsg {
+  margin-top: 4px;
+  padding: 10px 14px;
+  background: #FEF2F2;
+  border: 1px solid #FECACA;
+  border-radius: 8px;
+  color: #DC2626;
+  font-size: 13px;
+}
+
+/* ── Preview panel ────────────────────────────────────────────────────── */
+.previewPanel {
+  position: sticky;
+  top: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.previewLabel {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.previewPortal {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  font-size: 13px;
+}
+
+.previewNav {
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  height: 42px;
+  gap: 12px;
+  border-bottom: 1px solid rgba(0,0,0,0.08);
+}
+
+.previewBrand {
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.previewNavLinks {
+  display: flex;
+  gap: 4px;
+  flex: 1;
+}
+
+.previewNavLink {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: default;
+}
+
+.previewNavLinkActive {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: default;
+}
+
+.previewBody {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.previewGreeting {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.previewStats {
+  display: flex;
+  gap: 10px;
+}
+
+.previewStatCard {
+  background: rgba(255,255,255,0.8);
+  border: 1px solid rgba(0,0,0,0.08);
+  border-radius: 8px;
+  padding: 10px 16px;
+  text-align: center;
+  min-width: 60px;
+}
+
+.previewStatValue {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+
+.previewStatLabel {
+  font-size: 10px;
+  color: #6B7280;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+}
+
+.previewBtn {
+  align-self: flex-start;
+  padding: 8px 18px;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: default;
+}
+
+/* ── Login preview ────────────────────────────────────────────────────── */
+.previewLoginWrap {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px;
+  display: flex;
+  justify-content: center;
+}
+
+.previewLoginCard {
+  background: #ffffff;
+  border-radius: 10px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+  padding: 24px 22px;
+  width: 200px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.previewLoginLogo {
+  font-size: 1.6rem;
+  margin-bottom: 4px;
+}
+
+.previewLoginTitle {
+  font-size: 12px;
+  font-weight: 700;
+  color: #111827;
+  text-align: center;
+  line-height: 1.4;
+}
+
+.previewLoginSubtitle {
+  font-size: 11px;
+  color: #6B7280;
+  text-align: center;
+  line-height: 1.4;
+  margin-bottom: 4px;
+}
+
+.previewLoginInput {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid #E5E7EB;
+  border-radius: 5px;
+  font-size: 11px;
+  color: #9CA3AF;
+  box-sizing: border-box;
+  background: #FAFAFA;
+}
+
+.previewLoginBtn {
+  width: 100%;
+  padding: 7px;
+  border: none;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: default;
+  margin-top: 2px;
+}
+
+/* ── Modal ────────────────────────────────────────────────────────────── */
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal {
+  background: var(--white);
+  border-radius: 12px;
+  width: 440px;
+  max-width: calc(100vw - 32px);
+  box-shadow: 0 8px 40px rgba(0,0,0,0.18);
+  display: flex;
+  flex-direction: column;
+}
+
+.modalHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 24px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.modalTitle {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.modalClose {
+  background: none;
+  border: none;
+  font-size: 16px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 4px;
+  line-height: 1;
+}
+
+.modalClose:hover { background: var(--bg); }
+
+.modalBody {
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.modalFooter {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 24px 18px;
+  border-top: 1px solid var(--border);
+}

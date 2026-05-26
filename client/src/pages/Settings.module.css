@@ -1,0 +1,169 @@
+.page { display: flex; flex-direction: column; flex: 1; }
+
+.state { padding: 40px 32px; color: var(--text-secondary); }
+
+.content {
+  padding: 24px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  max-width: 760px;
+}
+
+/* ── Section ──────────────────────────────────────────────────────────── */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.sectionHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.sectionTitle {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 4px;
+}
+
+.sectionDesc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.55;
+  margin: 0;
+}
+
+/* ── Status badge ─────────────────────────────────────────────────────── */
+.badgeOn {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  background: #DCFCE7;
+  color: #15803D;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.badgeOff {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  background: #F1F5F9;
+  color: #64748B;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* ── Card (form container) ────────────────────────────────────────────── */
+.card {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ── Two-column grid ──────────────────────────────────────────────────── */
+.grid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+/* ── Three-column grid ────────────────────────────────────────────────── */
+.grid3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 14px;
+}
+
+/* ── Form footer (message + save button) ─────────────────────────────── */
+.formFooter {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding-top: 4px;
+}
+
+/* ── Test row ─────────────────────────────────────────────────────────── */
+.testRow {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+}
+
+/* ── Feedback messages ────────────────────────────────────────────────── */
+.msgOk   { font-size: 13.5px; color: #15803D; }
+.msgErr  { font-size: 13.5px; color: var(--priority-high); }
+.msgWarn { font-size: 13px; color: #B45309; margin: 0; }
+
+/* ── Password hint ────────────────────────────────────────────────────── */
+.passHint {
+  font-weight: 400;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+/* ── Info box ─────────────────────────────────────────────────────────── */
+.infoBox {
+  background: #F8F8F5;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 18px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.infoBox code {
+  font-family: 'SF Mono', 'Fira Mono', monospace;
+  font-size: 12px;
+  background: #EFEFEB;
+  padding: 1px 5px;
+  border-radius: 3px;
+  color: var(--text-primary);
+}
+
+.codeHint {
+  display: block;
+  margin-top: 8px;
+}
+
+/* ── Quick link cards ─────────────────────────────────────────────────── */
+.linkGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.linkCard {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  text-decoration: none;
+  color: var(--text-primary);
+  transition: border-color 0.15s, background 0.15s;
+}
+.linkCard:hover { border-color: var(--accent); background: #F8F9FF; text-decoration: none; }
+.linkCard svg { color: var(--accent); flex-shrink: 0; }
+
+.linkTitle { font-size: 13.5px; font-weight: 600; margin-bottom: 2px; }
+.linkDesc  { font-size: 12.5px; color: var(--text-secondary); }

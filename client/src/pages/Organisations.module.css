@@ -1,0 +1,245 @@
+.page { display: flex; flex-direction: column; flex: 1; }
+
+.content { padding: 24px 32px; }
+
+.btnNew {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  padding: 8px 18px;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 14px;
+  transition: background 0.15s;
+}
+.btnNew:hover { background: var(--accent-hover); }
+
+.state { padding: 32px 0; color: var(--text-secondary); text-align: center; }
+.err { color: var(--priority-high); }
+
+.tableWrap {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.table { width: 100%; border-collapse: collapse; }
+
+.table th {
+  background: #FAFAF8;
+  padding: 10px 16px;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--border);
+}
+
+.table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid #F3F3EE;
+  font-size: 13.5px;
+  color: var(--text-primary);
+  vertical-align: middle;
+}
+
+.row:hover { background: #FAFAF8; }
+.row:last-child td { border-bottom: none; }
+
+.name { font-weight: 600; }
+
+.btnRename {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 14px;
+  padding: 0 4px;
+  margin-left: 6px;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s;
+  vertical-align: middle;
+  cursor: pointer;
+  display: inline-block;
+  transform: scaleX(-1);
+}
+.row:hover .btnRename { opacity: 1; }
+.btnRename:hover { color: var(--accent); }
+.count { font-weight: 600; color: var(--accent); }
+.muted { color: var(--text-muted); font-size: 13px; }
+
+.empty {
+  text-align: center;
+  color: var(--text-muted);
+  padding: 40px !important;
+}
+
+/* Domain chips in table */
+.domains {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.domainChip {
+  display: inline-block;
+  background: #EFF6FF;
+  color: #1D4ED8;
+  border: 1px solid #BFDBFE;
+  border-radius: 4px;
+  padding: 2px 7px;
+  font-size: 12px;
+  font-family: 'SF Mono', 'Fira Mono', monospace;
+  font-weight: 500;
+}
+
+.noDomains { color: var(--text-muted); font-size: 13px; }
+
+.btnDomains {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  padding: 5px 12px;
+  border-radius: 5px;
+  font-size: 12.5px;
+  font-weight: 600;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.btnDomains:hover { background: #F5F8FF; border-color: var(--accent); color: var(--accent); }
+
+/* Domain add input — stretches inside the flex row */
+.domainAddInput {
+  flex: 1 !important;
+  min-width: 0 !important;
+  width: auto !important;
+}
+
+.domainHint {
+  font-size: 12px;
+  color: var(--text-muted);
+  display: block;
+  margin-top: 4px;
+}
+
+/* Multi-domain tag chips in NewOrgModal */
+.domainTags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.domainTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #EFF6FF;
+  color: #1D4ED8;
+  border: 1px solid #BFDBFE;
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-size: 12.5px;
+  font-family: 'SF Mono', 'Fira Mono', monospace;
+  font-weight: 500;
+}
+
+.domainTagRemove {
+  background: none;
+  border: none;
+  color: #60A5FA;
+  font-size: 16px;
+  line-height: 1;
+  padding: 0;
+  margin-left: 2px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+}
+.domainTagRemove:hover { color: #1D4ED8; }
+
+/* Input + Add button row */
+.domainAddRow {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.btnAddDomain {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  padding: 0 16px;
+  height: 38px;
+  border-radius: 6px;
+  font-size: 13.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: background 0.15s;
+  flex-shrink: 0;
+}
+.btnAddDomain:hover:not(:disabled) { background: var(--accent-hover); }
+.btnAddDomain:disabled { opacity: 0.45; cursor: default; }
+
+.optional {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  font-weight: 400;
+  margin-left: 4px;
+}
+
+/* Domain management modal */
+.domainModalBody {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.domainDesc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+
+.domainList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 40px;
+}
+
+.domainRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 10px;
+  background: #F8F8F5;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.domainEmpty {
+  font-size: 13px;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 10px 0;
+}
+
+.removeBtn {
+  background: none;
+  border: none;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--text-muted);
+  padding: 0 4px;
+}
+.removeBtn:hover { color: var(--priority-high); }
+
+.addDomainForm {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}

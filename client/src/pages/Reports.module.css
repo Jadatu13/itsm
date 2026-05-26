@@ -1,0 +1,68 @@
+.page    { display: flex; flex-direction: column; flex: 1; }
+.content { padding: 24px 32px; display: flex; flex-direction: column; gap: 20px; }
+.state   { padding: 40px 32px; color: var(--text-secondary); }
+.empty   { color: var(--text-muted); font-size: 13.5px; padding: 12px 0; }
+
+/* ── Stat cards ─────────────────────────────────────────────────────── */
+.statGrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+.statCard {
+  background: var(--white); border: 1px solid var(--border);
+  border-radius: 10px; padding: 20px 22px;
+}
+.statValue { font-size: 28px; font-weight: 700; line-height: 1; margin-bottom: 6px; }
+.statLabel { font-size: 12.5px; color: var(--text-secondary); font-weight: 500; }
+
+/* ── Panels ─────────────────────────────────────────────────────────── */
+.row   { display: flex; gap: 16px; }
+.panel {
+  background: var(--white); border: 1px solid var(--border);
+  border-radius: 10px; padding: 20px 22px;
+  flex: 1; display: flex; flex-direction: column; gap: 14px;
+  min-width: 0;
+}
+.panelHead  { display: flex; align-items: center; justify-content: space-between; }
+.panelTitle { font-size: 14px; font-weight: 700; color: var(--text-primary); margin: 0; }
+.daysSelect {
+  padding: 4px 8px; border: 1px solid var(--border); border-radius: 6px;
+  font-size: 12.5px; background: var(--bg); color: var(--text-primary); cursor: pointer;
+}
+
+/* ── Bar chart ─────────────────────────────────────────────────────── */
+.barChart {
+  display: flex; align-items: flex-end; gap: 4px;
+  height: 120px; overflow-x: auto; padding-bottom: 4px;
+}
+.barCol  { display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1; min-width: 20px; }
+.barWrap { flex: 1; width: 100%; display: flex; align-items: flex-end; }
+.bar     {
+  width: 100%; min-height: 2px;
+  background: var(--accent); border-radius: 3px 3px 0 0;
+  transition: opacity 0.15s;
+}
+.bar:hover { opacity: 0.75; }
+.barLabel  { font-size: 10px; color: var(--text-muted); white-space: nowrap; }
+
+/* ── Breakdown bars ─────────────────────────────────────────────────── */
+.breakdown { display: flex; flex-direction: column; gap: 10px; }
+.breakdownRow  { display: flex; align-items: center; gap: 10px; }
+.breakdownLabel { font-size: 13px; color: var(--text-secondary); width: 110px; text-transform: capitalize; flex-shrink: 0; }
+.breakdownBar  { flex: 1; height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; }
+.breakdownFill { height: 100%; border-radius: 4px; transition: width 0.4s ease; min-width: 4px; }
+.breakdownVal  { font-size: 13px; font-weight: 600; color: var(--text-primary); width: 28px; text-align: right; flex-shrink: 0; }
+
+/* ── Agent table ────────────────────────────────────────────────────── */
+.tableWrap { overflow-x: auto; }
+.table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.table thead th {
+  text-align: left; padding: 8px 12px;
+  font-size: 12px; font-weight: 600; color: var(--text-secondary);
+  border-bottom: 1px solid var(--border);
+}
+.table tbody td { padding: 10px 12px; border-bottom: 1px solid var(--border-light); }
+.agentName { display: flex; align-items: center; gap: 9px; font-weight: 500; }
+.agentAvatar {
+  width: 26px; height: 26px; border-radius: 50%;
+  background: var(--accent); color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700; flex-shrink: 0;
+}

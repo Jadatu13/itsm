@@ -1,0 +1,68 @@
+services:
+
+  # ── PostgreSQL ────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       itsm
+      POSTGRES_USER:     itsm
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+    volumes:
+      # Persistent data — on Unraid map this to /mnt/user/appdata/itsm/postgres
+      - postgres_data:/var/lib/postgresql/data
+      # Schema + seed run automatically on first start (empty data dir only)
+      - ./server/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./server/db/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U itsm -d itsm"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # ── Express API ───────────────────────────────────────────────────────────
+  server:
+    build: ./server
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://itsm:${POSTGRES_PASSWORD:-changeme}@postgres:5432/itsm
+      PORT:         3001
+      CLIENT_URL:      ${CLIENT_URL:-*}
+      # ── Encryption key — set this to protect stored SMTP password ──────────
+      ENCRYPTION_KEY:  ${ENCRYPTION_KEY:-}
+      # ── Microsoft Entra ID SSO ─────────────────────────────────────────────
+      AZURE_TENANT_ID:     ${AZURE_TENANT_ID:-}
+      AZURE_CLIENT_ID:     ${AZURE_CLIENT_ID:-}
+      AZURE_CLIENT_SECRET: ${AZURE_CLIENT_SECRET:-}
+      APP_URL:             ${APP_URL:-http://localhost:8080}
+      # ── Email (optional) — configure via the Settings page in the app ──────
+      SMTP_HOST:    ${SMTP_HOST:-}
+      SMTP_PORT:    ${SMTP_PORT:-587}
+      SMTP_SECURE:  ${SMTP_SECURE:-false}
+      SMTP_USER:    ${SMTP_USER:-}
+      SMTP_PASS:    ${SMTP_PASS:-}
+      SMTP_FROM:    ${SMTP_FROM:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ── React frontend (nginx) ────────────────────────────────────────────────
+  client:
+    build: ./client
+    restart: unless-stopped
+    ports:
+      # Change APP_PORT in .env to use a different host port.
+      # Default: http://<your-server-ip>:8080
+      - "${APP_PORT:-8080}:80"
+    depends_on:
+      - server
+
+volumes:
+  postgres_data:
+    # To pin the volume to a specific path on Unraid, replace with:
+    # driver: local
+    # driver_opts:
+    #   type: none
+    #   o: bind
+    #   device: /mnt/user/appdata/itsm/postgres

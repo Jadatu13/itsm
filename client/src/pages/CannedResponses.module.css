@@ -1,0 +1,59 @@
+.page    { display: flex; flex-direction: column; flex: 1; }
+.content { padding: 24px 32px; }
+.state   { padding: 40px 32px; color: var(--text-secondary); }
+
+.empty {
+  padding: 48px 32px;
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.7;
+}
+.empty p { margin: 0 0 6px; }
+
+.list { display: flex; flex-direction: column; gap: 12px; max-width: 760px; }
+
+.card {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.cardTitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.cardBody {
+  font-size: 13.5px;
+  color: var(--text-secondary);
+  line-height: 1.55;
+  white-space: pre-wrap;
+  max-height: 80px;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
+  mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
+}
+
+.cardActions { display: flex; gap: 8px; flex-shrink: 0; }
+.btnEdit   { padding: 4px 10px; border-radius: 5px; font-size: 12.5px; font-weight: 500; border: 1px solid var(--border); background: var(--white); color: var(--text-primary); cursor: pointer; }
+.btnEdit:hover { background: var(--bg); }
+.btnDelete { padding: 4px 10px; border-radius: 5px; font-size: 12.5px; font-weight: 500; border: 1px solid #FECACA; background: #FEF2F2; color: #B91C1C; cursor: pointer; }
+.btnDelete:hover { background: #FEE2E2; }
+.btnDanger { padding: 8px 16px; border-radius: 7px; font-size: 13.5px; font-weight: 600; border: none; background: #EF4444; color: #fff; cursor: pointer; }
+.btnDanger:hover { background: #DC2626; }
+
+.btnNew { padding: 7px 14px; border-radius: 7px; font-size: 13.5px; font-weight: 600; border: none; background: var(--accent); color: #fff; cursor: pointer; }
+.btnNew:hover { opacity: 0.88; }

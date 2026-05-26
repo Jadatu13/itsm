@@ -1,0 +1,40 @@
+.page    { display: flex; flex-direction: column; flex: 1; }
+.content { padding: 24px 32px; }
+.state   { padding: 40px 32px; color: var(--text-secondary); }
+
+.tableWrap { overflow-x: auto; }
+.table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.table thead th {
+  text-align: left;
+  padding: 10px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.table tbody td { padding: 11px 14px; border-bottom: 1px solid var(--border-light); vertical-align: middle; }
+.empty { color: var(--text-secondary); text-align: center; padding: 32px !important; }
+.muted { color: var(--text-muted); font-size: 13px; }
+
+.name  { display: flex; align-items: center; gap: 10px; font-weight: 500; }
+.avatar {
+  width: 30px; height: 30px; border-radius: 50%;
+  background: var(--accent); color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700; flex-shrink: 0;
+}
+
+.roleAdmin { background: #EFF6FF; color: #1D4ED8; padding: 2px 9px; border-radius: 12px; font-size: 11.5px; font-weight: 600; }
+.roleAgent { background: #F1F5F9; color: #475569; padding: 2px 9px; border-radius: 12px; font-size: 11.5px; font-weight: 600; }
+
+.actions { display: flex; gap: 8px; white-space: nowrap; }
+.btnEdit   { padding: 4px 10px; border-radius: 5px; font-size: 12.5px; font-weight: 500; border: 1px solid var(--border); background: var(--white); color: var(--text-primary); cursor: pointer; }
+.btnEdit:hover { background: var(--bg); }
+.btnDelete { padding: 4px 10px; border-radius: 5px; font-size: 12.5px; font-weight: 500; border: 1px solid #FECACA; background: #FEF2F2; color: #B91C1C; cursor: pointer; }
+.btnDelete:hover { background: #FEE2E2; }
+.btnDanger { padding: 8px 16px; border-radius: 7px; font-size: 13.5px; font-weight: 600; border: none; background: #EF4444; color: #fff; cursor: pointer; }
+.btnDanger:hover { background: #DC2626; }
+
+.btnNew { padding: 7px 14px; border-radius: 7px; font-size: 13.5px; font-weight: 600; border: none; background: var(--accent); color: #fff; cursor: pointer; }
+.btnNew:hover { opacity: 0.88; }

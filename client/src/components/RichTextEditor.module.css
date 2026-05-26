@@ -1,0 +1,223 @@
+.wrapper {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: visible;
+  background: var(--white);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.wrapper:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(79,127,255,0.1);
+}
+
+.wrapperInternal {
+  border-color: #FDE68A;
+  background: #FFFDF5;
+}
+.wrapperInternal:focus-within {
+  border-color: #F59E0B;
+  box-shadow: 0 0 0 3px rgba(245,158,11,0.12);
+}
+
+/* Toolbar */
+.toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  border-radius: 8px 8px 0 0;
+}
+
+.wrapperInternal .toolbar {
+  border-bottom-color: #FDE68A;
+  background: #FFFBEB;
+}
+
+.tbBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 5px;
+  border: none;
+  border-radius: 5px;
+  background: none;
+  cursor: pointer;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  transition: background 0.1s, color 0.1s;
+  font-family: inherit;
+}
+.tbBtn:hover:not(:disabled) {
+  background: rgba(0,0,0,0.06);
+  color: var(--text-primary);
+}
+.tbBtn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.tbActive {
+  background: var(--accent) !important;
+  color: #fff !important;
+}
+
+.tbDivider {
+  width: 1px;
+  height: 18px;
+  background: var(--border);
+  margin: 0 3px;
+  flex-shrink: 0;
+}
+
+/* Color picker */
+.colorPickerWrap {
+  position: relative;
+}
+
+.colorIcon {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.colorBar {
+  display: block;
+  width: 14px;
+  height: 3px;
+  border-radius: 2px;
+}
+
+.colorDropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px;
+  display: flex;
+  gap: 6px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+  z-index: 200;
+}
+
+.colorSwatch {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  background: var(--swatch-color);
+  padding: 0;
+  transition: transform 0.1s, border-color 0.1s;
+}
+.colorSwatch:hover { transform: scale(1.15); }
+.colorSwatchActive { border-color: var(--text-primary) !important; }
+
+/* Editor content area */
+.content {
+  padding: 12px 14px;
+  min-height: 100px;
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--text-primary);
+  font-family: inherit;
+}
+
+/* TipTap ProseMirror reset */
+.content :global(.ProseMirror) {
+  outline: none;
+  min-height: 80px;
+}
+
+.content :global(.ProseMirror p.is-editor-empty:first-child::before) {
+  content: attr(data-placeholder);
+  color: var(--text-muted);
+  pointer-events: none;
+  float: left;
+  height: 0;
+}
+
+/* Typography in editor */
+.content :global(.ProseMirror h1) { font-size: 20px; font-weight: 700; margin: 0.6em 0 0.3em; }
+.content :global(.ProseMirror h2) { font-size: 17px; font-weight: 700; margin: 0.6em 0 0.3em; }
+.content :global(.ProseMirror h3) { font-size: 15px; font-weight: 700; margin: 0.6em 0 0.3em; }
+.content :global(.ProseMirror p)  { margin: 0 0 0.5em; }
+.content :global(.ProseMirror p:last-child) { margin-bottom: 0; }
+.content :global(.ProseMirror ul),
+.content :global(.ProseMirror ol) { padding-left: 20px; margin: 0.4em 0; }
+.content :global(.ProseMirror li) { margin: 0.15em 0; }
+.content :global(.ProseMirror blockquote) {
+  border-left: 3px solid var(--border);
+  margin: 0.5em 0;
+  padding: 4px 12px;
+  color: var(--text-secondary);
+}
+.content :global(.ProseMirror code) {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-size: 13px;
+  font-family: 'SF Mono', 'Fira Mono', monospace;
+}
+.content :global(.ProseMirror pre) {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 14px;
+  font-family: 'SF Mono', 'Fira Mono', monospace;
+  font-size: 13px;
+  overflow-x: auto;
+  margin: 0.5em 0;
+}
+.content :global(.ProseMirror pre code) {
+  background: none;
+  border: none;
+  padding: 0;
+}
+.content :global(.ProseMirror a) { color: var(--accent); text-decoration: underline; }
+.content :global(.ProseMirror hr) { border: none; border-top: 1px solid var(--border); margin: 0.8em 0; }
+
+/* Tables */
+.content :global(.ProseMirror table) {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.6em 0;
+  overflow: hidden;
+  table-layout: fixed;
+}
+.content :global(.ProseMirror td),
+.content :global(.ProseMirror th) {
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  vertical-align: top;
+  font-size: 13.5px;
+  min-width: 60px;
+  position: relative;
+}
+.content :global(.ProseMirror th) {
+  background: var(--bg);
+  font-weight: 700;
+  font-size: 12.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.content :global(.ProseMirror .selectedCell::after) {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(79,127,255,0.12);
+  pointer-events: none;
+}

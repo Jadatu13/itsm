@@ -1,10 +1,11 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import PageHeader from '../components/PageHeader'
 import { StatusBadge, PriorityBadge, CategoryBadge, SourceBadge, CATEGORY_OPTIONS, SOURCE_OPTIONS } from '../components/Badge'
 import Modal from '../components/Modal'
 import ConfirmModal from '../components/ConfirmModal'
 import ContactSelect from '../components/ContactSelect'
+import RichTextEditor from '../components/RichTextEditor'
 import { formatDate } from '../utils/format'
 import { apiFetch } from '../utils/api'
 import { SlaChip } from './Dashboard'
@@ -32,6 +33,7 @@ export default function TicketDetail() {
 
   const isFirstLoad  = useRef(true)
   const repliesEndRef = useRef(null)
+  const editorRef = useRef(null)
 
   function load() {
     return Promise.all([
@@ -105,7 +107,7 @@ export default function TicketDetail() {
       })
     }
 
-    setReplyBody('')
+    setReplyBody('')   // triggers editor clear via useEffect in RichTextEditor
     const updated = await apiFetch(`/api/tickets/${id}/replies`).then(r => r.json())
     setReplies(updated)
     setTicket(t => ({ ...t, updated_at: new Date().toISOString() }))
@@ -160,7 +162,7 @@ export default function TicketDetail() {
                   {r.is_internal && <span className={styles.noteTag}>Internal Note</span>}
                   <span className={styles.ts}>{formatDate(r.created_at)}</span>
                 </div>
-                <div className={styles.bubbleBody}>{r.body}</div>
+                <div className={styles.bubbleBody} dangerouslySetInnerHTML={{ __html: r.body }} />
               </div>
             ))}
             <div ref={repliesEndRef} />
@@ -190,12 +192,12 @@ export default function TicketDetail() {
                 </button>
               </div>
 
-              <textarea
-                className={`${styles.replyInput} ${isInternal ? styles.replyInputInternal : ''}`}
-                placeholder={isInternal ? 'Add a private note (not visible to the contact)…' : 'Write a reply…'}
+              <RichTextEditor
                 value={replyBody}
-                onChange={e => setReplyBody(e.target.value)}
-                rows={4}
+                onChange={setReplyBody}
+                placeholder={isInternal ? 'Add a private note (not visible to the contact)…' : 'Write a reply…'}
+                internalMode={isInternal}
+                ref={editorRef}
               />
               {replyError && <div className={styles.replyError}>{replyError}</div>}
               <div className={styles.replyActions}>
@@ -292,7 +294,10 @@ export default function TicketDetail() {
       {showCanned && (
         <CannedPicker
           items={cannedList}
-          onSelect={body => { setReplyBody(prev => prev ? prev + '\n\n' + body : body); setShowCanned(false) }}
+          onSelect={html => {
+            editorRef.current?.insertHTMLContent(html)
+            setShowCanned(false)
+          }}
           onClose={() => setShowCanned(false)}
         />
       )}
@@ -300,7 +305,10 @@ export default function TicketDetail() {
       {showKB && (
         <KBPicker
           items={kbList}
-          onSelect={text => { setReplyBody(prev => prev ? prev + '\n\n' + text : text); setShowKB(false) }}
+          onSelect={html => {
+            editorRef.current?.insertHTMLContent(html)
+            setShowKB(false)
+          }}
           onClose={() => setShowKB(false)}
         />
       )}
@@ -323,6 +331,10 @@ export default function TicketDetail() {
 
 // ─── Canned response picker ───────────────────────────────────────────────────
 
+function plainToHtml(text) {
+  return text.split(/\n\n+/).map(para => `<p>${para.replace(/\n/g, '<br>')}</p>`).join('')
+}
+
 function CannedPicker({ items, onSelect, onClose }) {
   const [search, setSearch] = useState('')
   const filtered = items.filter(i => i.title.toLowerCase().includes(search.toLowerCase()) || i.body.toLowerCase().includes(search.toLowerCase()))
@@ -333,7 +345,7 @@ function CannedPicker({ items, onSelect, onClose }) {
         {filtered.length === 0 && <div className={styles.cannedEmpty}>No templates found.</div>}
         <div className={styles.cannedList}>
           {filtered.map(item => (
-            <div key={item.id} className={styles.cannedItem} onClick={() => onSelect(item.body)}>
+            <div key={item.id} className={styles.cannedItem} onClick={() => onSelect(plainToHtml(item.body))}>
               <div className={styles.cannedTitle}>{item.title}</div>
               <div className={styles.cannedPreview}>{item.body}</div>
             </div>
@@ -348,18 +360,25 @@ function CannedPicker({ items, onSelect, onClose }) {
 
 function KBPicker({ items, onSelect, onClose }) {
   const [search, setSearch] = useState('')
+  const [loading, setLoading] = useState(null)
   const filtered = items.filter(a =>
     a.title.toLowerCase().includes(search.toLowerCase()) ||
     (a.excerpt || '').toLowerCase().includes(search.toLowerCase()) ||
     (a.folder_name || '').toLowerCase().includes(search.toLowerCase())
   )
 
-  function buildInsertText(article) {
+  async function handleSelect(article) {
+    setLoading(article.id)
+    const full = await apiFetch(`/api/kb/${article.id}`).then(r => r.json()).catch(() => null)
     const portalUrl = `${window.location.origin}/portal/kb/${article.id}`
-    const parts = [`📖 ${article.title}`]
-    if (article.excerpt) parts.push(article.excerpt.trim())
-    parts.push(`Read the full article: ${portalUrl}`)
-    return parts.join('\n\n')
+    let html = `<h2>📖 ${article.title}</h2>`
+    if (full?.body) {
+      html += full.body
+    } else if (article.excerpt) {
+      html += `<p>${article.excerpt.trim()}</p>`
+    }
+    html += `<p><a href="${portalUrl}">Read the full article →</a></p>`
+    onSelect(html)
   }
 
   return (
@@ -369,7 +388,8 @@ function KBPicker({ items, onSelect, onClose }) {
         {filtered.length === 0 && <div className={styles.cannedEmpty}>No articles found{search ? ` matching "${search}"` : ''}.</div>}
         <div className={styles.cannedList}>
           {filtered.map(article => (
-            <div key={article.id} className={styles.kbItem} onClick={() => onSelect(buildInsertText(article))}>
+            <div key={article.id} className={`${styles.kbItem} ${loading === article.id ? styles.kbItemLoading : ''}`}
+              onClick={() => !loading && handleSelect(article)}>
               <div className={styles.kbItemHeader}>
                 <span className={styles.cannedTitle}>{article.title}</span>
                 {article.folder_name && (

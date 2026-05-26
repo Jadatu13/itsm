@@ -144,6 +144,67 @@
   border-bottom-right-radius: 4px;
 }
 
+/* Rich HTML content inside bubbles */
+.bubbleBody :global(p) { margin: 0 0 0.45em; }
+.bubbleBody :global(p:last-child) { margin-bottom: 0; }
+.bubbleBody :global(h1), .bubbleBody :global(h2), .bubbleBody :global(h3) {
+  font-weight: 700; margin: 0.5em 0 0.25em; line-height: 1.3;
+}
+.bubbleBody :global(h1) { font-size: 17px; }
+.bubbleBody :global(h2) { font-size: 15px; }
+.bubbleBody :global(h3) { font-size: 13.5px; }
+.bubbleBody :global(ul), .bubbleBody :global(ol) { padding-left: 18px; margin: 0.3em 0; }
+.bubbleBody :global(li) { margin: 0.1em 0; }
+.bubbleBody :global(a) { text-decoration: underline; opacity: 0.9; }
+.bubbleBody :global(strong) { font-weight: 700; }
+.bubbleBody :global(em) { font-style: italic; }
+.bubbleBody :global(code) {
+  background: rgba(0,0,0,0.08);
+  border-radius: 3px;
+  padding: 1px 4px;
+  font-family: 'SF Mono', 'Fira Mono', monospace;
+  font-size: 12.5px;
+}
+.bubbleBody :global(pre) {
+  background: rgba(0,0,0,0.08);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-family: 'SF Mono', 'Fira Mono', monospace;
+  font-size: 12.5px;
+  overflow-x: auto;
+  margin: 0.4em 0;
+}
+.bubbleBody :global(blockquote) {
+  border-left: 3px solid rgba(0,0,0,0.2);
+  padding-left: 10px;
+  margin: 0.4em 0;
+  opacity: 0.8;
+}
+.bubbleBody :global(table) {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.5em 0;
+  font-size: 13px;
+}
+.bubbleBody :global(td), .bubbleBody :global(th) {
+  border: 1px solid rgba(0,0,0,0.15);
+  padding: 5px 9px;
+  vertical-align: top;
+}
+.bubbleBody :global(th) {
+  background: rgba(0,0,0,0.06);
+  font-weight: 700;
+}
+/* Invert table borders for agent (blue) bubble */
+.agent .bubbleBody :global(td), .agent .bubbleBody :global(th) {
+  border-color: rgba(255,255,255,0.3);
+}
+.agent .bubbleBody :global(th) {
+  background: rgba(255,255,255,0.12);
+}
+.agent .bubbleBody :global(a) { color: #fff; }
+.agent .bubbleBody :global(code) { background: rgba(255,255,255,0.15); }
+
 .contact .bubbleBody {
   background: var(--white);
   border: 1px solid var(--border);
@@ -438,6 +499,7 @@
   transition: background 0.12s;
 }
 .kbItem:hover { background: var(--bg); border-color: var(--accent); }
+.kbItemLoading { opacity: 0.5; cursor: wait; }
 
 .kbItemHeader {
   display: flex;

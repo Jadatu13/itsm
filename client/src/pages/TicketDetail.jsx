@@ -26,6 +26,8 @@ export default function TicketDetail() {
   const [showEdit, setShowEdit] = useState(false)
   const [showCanned, setShowCanned] = useState(false)
   const [cannedList, setCannedList] = useState([])
+  const [showKB, setShowKB] = useState(false)
+  const [kbList, setKbList] = useState([])
   const [confirmDelete, setConfirmDelete] = useState(false)
 
   const isFirstLoad  = useRef(true)
@@ -118,6 +120,14 @@ export default function TicketDetail() {
     setShowCanned(true)
   }
 
+  async function openKB() {
+    if (!kbList.length) {
+      const d = await apiFetch('/api/kb?published=true').then(r => r.json())
+      if (Array.isArray(d)) setKbList(d.filter(a => a.published))
+    }
+    setShowKB(true)
+  }
+
   if (loading) return <div className={styles.page}><PageHeader title="Ticket" /><div className={styles.state}>Loading…</div></div>
   if (error)   return <div className={styles.page}><PageHeader title="Ticket" /><div className={`${styles.state} ${styles.err}`}>{error}</div></div>
 
@@ -173,6 +183,10 @@ export default function TicketDetail() {
                 <button type="button" className={styles.cannedBtn} onClick={openCanned} title="Insert canned response">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
                   Templates
+                </button>
+                <button type="button" className={styles.cannedBtn} onClick={openKB} title="Link a knowledge base article">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+                  KB Article
                 </button>
               </div>
 
@@ -283,6 +297,14 @@ export default function TicketDetail() {
         />
       )}
 
+      {showKB && (
+        <KBPicker
+          items={kbList}
+          onSelect={text => { setReplyBody(prev => prev ? prev + '\n\n' + text : text); setShowKB(false) }}
+          onClose={() => setShowKB(false)}
+        />
+      )}
+
       {confirmDelete && (
         <ConfirmModal
           title="Delete ticket?"
@@ -314,6 +336,49 @@ function CannedPicker({ items, onSelect, onClose }) {
             <div key={item.id} className={styles.cannedItem} onClick={() => onSelect(item.body)}>
               <div className={styles.cannedTitle}>{item.title}</div>
               <div className={styles.cannedPreview}>{item.body}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+// ─── KB article picker ────────────────────────────────────────────────────────
+
+function KBPicker({ items, onSelect, onClose }) {
+  const [search, setSearch] = useState('')
+  const filtered = items.filter(a =>
+    a.title.toLowerCase().includes(search.toLowerCase()) ||
+    (a.excerpt || '').toLowerCase().includes(search.toLowerCase()) ||
+    (a.folder_name || '').toLowerCase().includes(search.toLowerCase())
+  )
+
+  function buildInsertText(article) {
+    const portalUrl = `${window.location.origin}/portal/kb/${article.id}`
+    const parts = [`📖 ${article.title}`]
+    if (article.excerpt) parts.push(article.excerpt.trim())
+    parts.push(`Read the full article: ${portalUrl}`)
+    return parts.join('\n\n')
+  }
+
+  return (
+    <Modal title="Insert KB Article" onClose={onClose}>
+      <div className={styles.cannedPicker}>
+        <input className={formStyles.input} placeholder="Search articles…" value={search} autoFocus onChange={e => setSearch(e.target.value)} />
+        {filtered.length === 0 && <div className={styles.cannedEmpty}>No articles found{search ? ` matching "${search}"` : ''}.</div>}
+        <div className={styles.cannedList}>
+          {filtered.map(article => (
+            <div key={article.id} className={styles.kbItem} onClick={() => onSelect(buildInsertText(article))}>
+              <div className={styles.kbItemHeader}>
+                <span className={styles.cannedTitle}>{article.title}</span>
+                {article.folder_name && (
+                  <span className={styles.kbFolder}>{article.folder_icon || '📁'} {article.folder_name}</span>
+                )}
+              </div>
+              {article.excerpt && (
+                <div className={styles.cannedPreview}>{article.excerpt}</div>
+              )}
             </div>
           ))}
         </div>

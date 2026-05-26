@@ -285,28 +285,34 @@ router.post('/service-catalog/:id/submit', portalAuth, async (req, res) => {
     );
     const ticket = ticketResult.rows[0];
 
-    // Determine approval status
-    const approvalStatus = form.requires_approval ? 'pending' : 'not_required';
+    // Only create a service_request (and potentially queue for approval/execution)
+    // if the form has an M365 automation action AND this org has a linked tenant.
+    // Forms from orgs with no tenant, or forms with no automation, just log a ticket.
+    const hasAutomation = !!(form.automation_action?.type && form.automation_action.type !== 'none');
+    const tenant = hasAutomation ? await resolvePortalTenant(req.contact.id) : null;
+    const shouldQueue = hasAutomation && !!tenant;
 
-    // Insert service_request record
-    const srInsert = await db.query(
-      `INSERT INTO service_requests (form_id, contact_id, ticket_id, form_name, field_values, approval_status)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       RETURNING *`,
-      [form.id, req.contact.id, ticket.id, form.name, JSON.stringify(field_values), approvalStatus]
-    );
+    if (shouldQueue) {
+      const approvalStatus = form.requires_approval ? 'pending' : 'not_required';
+      const srInsert = await db.query(
+        `INSERT INTO service_requests (form_id, contact_id, ticket_id, form_name, field_values, approval_status)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         RETURNING *`,
+        [form.id, req.contact.id, ticket.id, form.name, JSON.stringify(field_values), approvalStatus]
+      );
 
-    // If approval not required but automation action exists, execute immediately
-    if (!form.requires_approval && form.automation_action?.type && form.automation_action.type !== 'none') {
-      const { executeAutomation } = require('../graphExecutor');
-      const sr = srInsert.rows[0];
-      executeAutomation(sr, form).then(async (result) => {
-        const status = result.noTenant ? 'no_tenant' : result.success ? 'completed' : 'failed';
-        await db.query(
-          `UPDATE service_requests SET execution_status = $1, execution_log = $2 WHERE id = $3`,
-          [status, JSON.stringify(result.log), sr.id]
-        );
-      }).catch(err => console.error('[portal-auto-execute]', err));
+      // No approval required → execute the automation immediately
+      if (!form.requires_approval) {
+        const { executeAutomation } = require('../graphExecutor');
+        const sr = srInsert.rows[0];
+        executeAutomation(sr, form).then(async (result) => {
+          const status = result.success ? 'completed' : 'failed';
+          await db.query(
+            `UPDATE service_requests SET execution_status = $1, execution_log = $2 WHERE id = $3`,
+            [status, JSON.stringify(result.log), sr.id]
+          );
+        }).catch(err => console.error('[portal-auto-execute]', err));
+      }
     }
 
     // Get the reference
@@ -314,7 +320,7 @@ router.post('/service-catalog/:id/submit', portalAuth, async (req, res) => {
     res.json({
       ticket_id: ticket.id,
       reference: refResult.rows[0]?.reference,
-      approval_required: form.requires_approval || false,
+      approval_required: shouldQueue && form.requires_approval,
     });
   } catch (err) {
     console.error(err);

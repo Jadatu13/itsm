@@ -138,6 +138,13 @@
 }
 .suggestionBtn:hover { background: var(--accent-hover); }
 
+/* Two-column field row */
+.row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
 /* Inline org creation row */
 .inlineOrgRow {
   display: flex;

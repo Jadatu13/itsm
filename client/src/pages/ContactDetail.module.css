@@ -7,10 +7,37 @@
   padding: 7px 16px;
   border-radius: 6px;
   font-weight: 600;
-  font-size: 14px;
+  font-size: 13.5px;
+  cursor: pointer;
   transition: all 0.15s;
 }
 .btnEdit:hover { background: #F0F5FF; }
+
+.btnMerge {
+  background: none;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  padding: 7px 16px;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 13.5px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.btnMerge:hover { background: var(--bg); color: var(--text-primary); }
+
+.btnDelete {
+  background: none;
+  border: 1px solid #FECACA;
+  color: #DC2626;
+  padding: 7px 16px;
+  border-radius: 6px;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.btnDelete:hover { background: #FEF2F2; border-color: #DC2626; }
 
 .newOrgBox {
   display: flex;
@@ -59,9 +86,21 @@
 .info { display: flex; flex-direction: column; gap: 3px; }
 
 .fullName { font-size: 18px; font-weight: 700; color: var(--text-primary); }
-.email { font-size: 14px; color: var(--text-secondary); }
-.org { font-size: 13px; color: var(--accent); font-weight: 600; }
-.joined { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.email    { font-size: 14px; color: var(--text-secondary); }
+.phone    { font-size: 13.5px; color: var(--text-secondary); display: flex; align-items: center; gap: 5px; }
+.org      { font-size: 13px; color: var(--accent); font-weight: 600; }
+.joined   { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+.notesBox {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 18px;
+  font-size: 13.5px;
+  line-height: 1.65;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+}
 
 .section {}
 
@@ -127,3 +166,78 @@
   color: var(--text-muted);
   padding: 40px !important;
 }
+
+/* ── Merge modal ─────────────────────────────────────────────────────────── */
+.mergeModal { display: flex; flex-direction: column; gap: 14px; }
+
+.mergeInfo {
+  font-size: 13.5px;
+  color: var(--text-secondary);
+  line-height: 1.55;
+  margin: 0;
+  background: #FFFBEB;
+  border: 1px solid #FDE68A;
+  border-radius: 7px;
+  padding: 10px 14px;
+}
+
+.mergeResults {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 240px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.mergeResult {
+  padding: 10px 14px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.1s;
+}
+.mergeResult:last-child { border-bottom: none; }
+.mergeResult:hover { background: var(--bg); }
+
+.mergeResultName { font-size: 13.5px; font-weight: 600; color: var(--text-primary); }
+.mergeResultMeta { font-size: 12px; color: var(--text-muted); margin-top: 1px; }
+
+.mergeSelected {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.mergeSelectedLabel {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+}
+.mergeChange {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  align-self: flex-start;
+}
+.mergeChange:hover { text-decoration: underline; }
+
+.btnMergeConfirm {
+  background: #7C3AED;
+  color: #fff;
+  border: none;
+  padding: 9px 20px;
+  border-radius: 7px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btnMergeConfirm:hover:not(:disabled) { background: #6D28D9; }
+.btnMergeConfirm:disabled { opacity: 0.5; cursor: not-allowed; }

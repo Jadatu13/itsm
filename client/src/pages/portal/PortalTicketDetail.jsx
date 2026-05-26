@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { portalFetch } from '../../utils/portalApi'
+import RichTextEditor from '../../components/RichTextEditor'
 import styles from './Portal.module.css'
 
 function statusBadgeClass(status) {
@@ -30,6 +31,7 @@ export default function PortalTicketDetail() {
   const [sending, setSending] = useState(false)
   const [error, setError] = useState('')
   const bottomRef = useRef(null)
+  const editorRef = useRef(null)
 
   const contact = (() => {
     try { return JSON.parse(localStorage.getItem('portal_contact') || 'null') } catch { return null }
@@ -51,7 +53,7 @@ export default function PortalTicketDetail() {
 
   async function handleReply(e) {
     e.preventDefault()
-    if (!replyBody.trim()) return
+    if (!replyBody.trim() || replyBody === '<p></p>') return
     setSending(true)
     setError('')
     try {
@@ -114,7 +116,7 @@ export default function PortalTicketDetail() {
                     <div className={styles.messageSender}>
                       {r.sender_name || (isAgent ? 'Support Agent' : 'You')}
                     </div>
-                    <div style={{ whiteSpace: 'pre-wrap' }}>{r.body}</div>
+                    <div dangerouslySetInnerHTML={{ __html: r.body }} />
                     <div className={styles.messageTime}>{formatDate(r.created_at)}</div>
                   </div>
                 )
@@ -124,15 +126,15 @@ export default function PortalTicketDetail() {
 
             {ticket.status !== 'resolved' && (
               <form onSubmit={handleReply} className={styles.replyForm} style={{ marginTop: 20 }}>
-                <textarea
-                  className={styles.replyTextarea}
-                  placeholder="Write a reply…"
+                <RichTextEditor
+                  ref={editorRef}
                   value={replyBody}
-                  onChange={e => setReplyBody(e.target.value)}
-                  required
+                  onChange={setReplyBody}
+                  placeholder="Write a reply…"
                 />
                 {error && <div className={styles.errorMsg}>{error}</div>}
-                <button type="submit" className={styles.btnPrimarySmall} disabled={sending}>
+                <button type="submit" className={styles.btnPrimarySmall}
+                  disabled={sending || !replyBody.trim() || replyBody === '<p></p>'}>
                   {sending ? 'Sending…' : 'Send Reply'}
                 </button>
               </form>

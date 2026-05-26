@@ -23,7 +23,7 @@ router.get('/', async (req, res) => {
 
     if (search) {
       params.push(`%${search}%`);
-      conditions.push(`t.subject ILIKE $${params.length}`);
+      conditions.push(`(t.subject ILIKE $${params.length} OR t.reference ILIKE $${params.length})`);
     }
 
     if (req.query.priority) {
@@ -280,6 +280,22 @@ router.delete('/:id', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to delete ticket' });
+  }
+});
+
+// POST /api/tickets/:id/merge — move all replies to target, then delete source
+router.post('/:id/merge', async (req, res) => {
+  const sourceId = req.params.id;
+  const { target_id } = req.body;
+  if (!target_id) return res.status(400).json({ error: 'target_id is required' });
+  if (String(sourceId) === String(target_id)) return res.status(400).json({ error: 'Cannot merge a ticket into itself' });
+  try {
+    await db.query('UPDATE ticket_replies SET ticket_id = $1 WHERE ticket_id = $2', [target_id, sourceId]);
+    await db.query('DELETE FROM tickets WHERE id = $1', [sourceId]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to merge tickets' });
   }
 });
 

@@ -30,6 +30,7 @@ export default function TicketDetail() {
   const [showKB, setShowKB] = useState(false)
   const [kbList, setKbList] = useState([])
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [showMerge, setShowMerge] = useState(false)
 
   const isFirstLoad  = useRef(true)
   const repliesEndRef = useRef(null)
@@ -141,6 +142,7 @@ export default function TicketDetail() {
         title={ticket.reference}
         action={
           <div style={{ display: 'flex', gap: 8 }}>
+            <button className={styles.btnMerge} onClick={() => setShowMerge(true)}>Merge Ticket</button>
             <button className={styles.btnEdit} onClick={() => setShowEdit(true)}>Edit Ticket</button>
             <button className={styles.btnDelete} onClick={() => setConfirmDelete(true)}>Delete</button>
           </div>
@@ -325,7 +327,99 @@ export default function TicketDetail() {
           onClose={() => setConfirmDelete(false)}
         />
       )}
+
+      {showMerge && (
+        <MergeTicketModal
+          ticket={ticket}
+          onClose={() => setShowMerge(false)}
+          onMerged={targetId => navigate(`/tickets/${targetId}`)}
+        />
+      )}
     </div>
+  )
+}
+
+// ─── Merge ticket modal ───────────────────────────────────────────────────────
+
+function MergeTicketModal({ ticket, onClose, onMerged }) {
+  const [search, setSearch] = useState('')
+  const [results, setResults] = useState([])
+  const [selected, setSelected] = useState(null)
+  const [merging, setMerging] = useState(false)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    if (!search.trim()) { setResults([]); return }
+    const t = setTimeout(() => {
+      apiFetch(`/api/tickets?search=${encodeURIComponent(search)}`)
+        .then(r => r.json())
+        .then(d => {
+          const list = Array.isArray(d) ? d : (Array.isArray(d.tickets) ? d.tickets : [])
+          setResults(list.filter(t => String(t.id) !== String(ticket.id)))
+        })
+        .catch(() => {})
+    }, 250)
+    return () => clearTimeout(t)
+  }, [search])
+
+  async function handleMerge() {
+    if (!selected) return
+    setMerging(true)
+    setError(null)
+    const res = await apiFetch(`/api/tickets/${ticket.id}/merge`, {
+      method: 'POST',
+      body: JSON.stringify({ target_id: selected.id }),
+    })
+    const data = await res.json()
+    if (!res.ok) { setError(data.error); setMerging(false); return }
+    onMerged(selected.id)
+  }
+
+  return (
+    <Modal title="Merge Ticket" onClose={onClose}>
+      <div className={styles.mergeModal}>
+        <p className={styles.mergeInfo}>
+          All replies from <strong>{ticket.reference}</strong> will be moved into the selected ticket, then this ticket will be closed and deleted.
+        </p>
+        <div className={formStyles.field}>
+          <label className={formStyles.label}>Search for target ticket</label>
+          <input
+            className={formStyles.input}
+            placeholder="Search by reference or subject…"
+            value={search}
+            autoFocus
+            onChange={e => { setSearch(e.target.value); setSelected(null) }}
+          />
+        </div>
+        {results.length > 0 && !selected && (
+          <div className={styles.mergeResults}>
+            {results.map(t => (
+              <div key={t.id} className={styles.mergeResult} onClick={() => setSelected(t)}>
+                <div className={styles.mergeResultName}>{t.reference} — {t.subject}</div>
+                <div className={styles.mergeResultMeta}>{t.contact_name ? `${t.contact_name} · ` : ''}{t.status}</div>
+              </div>
+            ))}
+          </div>
+        )}
+        {selected && (
+          <div className={styles.mergeSelected}>
+            <div className={styles.mergeSelectedLabel}>Merging into:</div>
+            <div className={styles.mergeResult} style={{ cursor: 'default' }}>
+              <div className={styles.mergeResultName}>{selected.reference} — {selected.subject}</div>
+              <div className={styles.mergeResultMeta}>{selected.contact_name ? `${selected.contact_name} · ` : ''}{selected.status}</div>
+            </div>
+            <button type="button" className={styles.mergeChange} onClick={() => setSelected(null)}>Change</button>
+          </div>
+        )}
+        {error && <div className={formStyles.error} style={{ marginTop: 4 }}>{error}</div>}
+        <div className={formStyles.actions}>
+          <button type="button" className={formStyles.btnSecondary} onClick={onClose}>Cancel</button>
+          <button type="button" className={styles.btnMergeConfirm} disabled={!selected || merging} onClick={handleMerge}>
+            {merging ? 'Merging…' : 'Merge Tickets'}
+          </button>
+        </div>
+      </div>
+    </Modal>
   )
 }
 

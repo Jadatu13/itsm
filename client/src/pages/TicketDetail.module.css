@@ -13,9 +13,23 @@
   border-radius: 6px;
   font-size: 13.5px;
   font-weight: 600;
+  cursor: pointer;
   transition: all 0.15s;
 }
 .btnEdit:hover { background: var(--bg); color: var(--text-primary); border-color: var(--text-secondary); }
+
+.btnMerge {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  padding: 7px 16px;
+  border-radius: 6px;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.btnMerge:hover { background: var(--bg); color: var(--text-primary); }
 
 .btnDelete {
   background: none;
@@ -515,3 +529,66 @@
   white-space: nowrap;
   flex-shrink: 0;
 }
+
+/* ── Merge ticket modal ───────────────────────────────────────────────────── */
+.mergeModal  { display: flex; flex-direction: column; gap: 14px; }
+
+.mergeInfo {
+  font-size: 13.5px;
+  color: var(--text-secondary);
+  line-height: 1.55;
+  margin: 0;
+  background: #FFFBEB;
+  border: 1px solid #FDE68A;
+  border-radius: 7px;
+  padding: 10px 14px;
+}
+
+.mergeResults {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.mergeResult {
+  padding: 10px 14px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.1s;
+}
+.mergeResult:last-child { border-bottom: none; }
+.mergeResult:hover { background: var(--bg); }
+
+.mergeResultName { font-size: 13.5px; font-weight: 600; color: var(--text-primary); }
+.mergeResultMeta { font-size: 12px; color: var(--text-muted); margin-top: 1px; text-transform: capitalize; }
+
+.mergeSelected    { display: flex; flex-direction: column; gap: 6px; }
+.mergeSelectedLabel {
+  font-size: 12px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--text-secondary);
+}
+.mergeChange {
+  background: none; border: none;
+  color: var(--accent); font-size: 12.5px; font-weight: 600;
+  cursor: pointer; padding: 0; align-self: flex-start;
+}
+.mergeChange:hover { text-decoration: underline; }
+
+.btnMergeConfirm {
+  background: #7C3AED;
+  color: #fff;
+  border: none;
+  padding: 9px 20px;
+  border-radius: 7px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btnMergeConfirm:hover:not(:disabled) { background: #6D28D9; }
+.btnMergeConfirm:disabled { opacity: 0.5; cursor: not-allowed; }

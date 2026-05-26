@@ -290,8 +290,40 @@ router.post('/:id/merge', async (req, res) => {
   if (!target_id) return res.status(400).json({ error: 'target_id is required' });
   if (String(sourceId) === String(target_id)) return res.status(400).json({ error: 'Cannot merge a ticket into itself' });
   try {
+    // Fetch source ticket details before deleting
+    const srcResult = await db.query(
+      `SELECT t.reference, t.subject, t.description, t.priority, t.category,
+              c.first_name || ' ' || c.last_name AS contact_name, c.email AS contact_email
+       FROM tickets t
+       LEFT JOIN contacts c ON c.id = t.contact_id
+       WHERE t.id = $1`,
+      [sourceId]
+    );
+    if (!srcResult.rows.length) return res.status(404).json({ error: 'Source ticket not found' });
+    const src = srcResult.rows[0];
+
+    // Move all replies from source to target
     await db.query('UPDATE ticket_replies SET ticket_id = $1 WHERE ticket_id = $2', [target_id, sourceId]);
+
+    // Post an internal note on the target summarising what was merged in
+    const noteLines = [
+      `<p><strong>Merged from ${src.reference}</strong></p>`,
+      `<p><strong>Subject:</strong> ${src.subject}</p>`,
+      src.contact_name ? `<p><strong>Contact:</strong> ${src.contact_name} (${src.contact_email})</p>` : null,
+      src.priority     ? `<p><strong>Priority:</strong> ${src.priority}</p>` : null,
+      src.category     ? `<p><strong>Category:</strong> ${src.category}</p>` : null,
+      src.description  ? `<hr/><p>${src.description.replace(/\n/g, '<br>')}</p>` : null,
+    ].filter(Boolean).join('');
+
+    await db.query(
+      `INSERT INTO ticket_replies (ticket_id, body, is_agent_reply, is_internal, sender_name)
+       VALUES ($1, $2, true, true, 'System')`,
+      [target_id, noteLines]
+    );
+
+    // Delete the source ticket (cascade removes any remaining replies)
     await db.query('DELETE FROM tickets WHERE id = $1', [sourceId]);
+
     res.json({ success: true });
   } catch (err) {
     console.error(err);

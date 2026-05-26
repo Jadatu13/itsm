@@ -401,30 +401,13 @@ router.get('/graph/groups', portalAuth, async (req, res) => {
   }
 });
 
-// GET /api/portal/check-upn?upn=...&form_id=... — real-time UPN availability check
+// GET /api/portal/check-upn?upn=... — real-time UPN availability check
 router.get('/check-upn', portalAuth, async (req, res) => {
-  const { upn, form_id } = req.query;
+  const { upn } = req.query;
   if (!upn) return res.status(400).json({ error: 'upn is required' });
 
   try {
-    // Find the tenant — prefer the form's pinned tenant, fall back to first connected
-    let tenant = null;
-    if (form_id) {
-      const fr = await db.query(
-        'SELECT automation_tenant_id FROM service_request_forms WHERE id = $1',
-        [form_id]
-      );
-      const tenantId = fr.rows[0]?.automation_tenant_id;
-      if (tenantId) {
-        const tr = await db.query('SELECT * FROM m365_tenants WHERE id = $1 AND connected = true', [tenantId]);
-        tenant = tr.rows[0] || null;
-      }
-    }
-    if (!tenant) {
-      const tr = await db.query('SELECT * FROM m365_tenants WHERE connected = true ORDER BY created_at ASC LIMIT 1');
-      tenant = tr.rows[0] || null;
-    }
-
+    const tenant = await resolvePortalTenant(req.contact?.id);
     if (!tenant) return res.json({ exists: false, checked: false });
 
     const { checkUPNExists } = require('../graphExecutor');

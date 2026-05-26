@@ -220,11 +220,27 @@ export default function PortalServiceRequest() {
       return
     }
 
+    // For split-email fields, combine the local part with the contact's domain
+    // so field_values always stores a complete email address
+    const submittedValues = { ...values }
+    for (const field of form.fields || []) {
+      const isSplit = contactDomain && (
+        (isCreateUser && field.id === emailFieldId) ||
+        (isCreateSharedMailbox && field.id === mailboxEmailFieldId)
+      )
+      if (isSplit) {
+        const local = (submittedValues[field.id] || '').trim()
+        if (local && !local.includes('@')) {
+          submittedValues[field.id] = `${local}@${contactDomain}`
+        }
+      }
+    }
+
     setSubmitting(true)
     try {
       const res = await portalFetch(`/api/portal/service-catalog/${id}/submit`, {
         method: 'POST',
-        body: JSON.stringify({ field_values: values }),
+        body: JSON.stringify({ field_values: submittedValues }),
       })
       const data = await res.json()
       if (!res.ok) { setError(data.error || 'Submission failed.'); return }

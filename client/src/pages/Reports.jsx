@@ -167,11 +167,16 @@ function StatCard({ label, value, color }) {
   )
 }
 
+function formatLabel(str) {
+  if (!str) return 'Uncategorised'
+  return str.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+}
+
 function BreakdownRow({ label, value, color, total }) {
   const pct = total > 0 ? Math.round((value / total) * 100) : 0
   return (
     <div className={styles.breakdownRow}>
-      <span className={styles.breakdownLabel}>{label}</span>
+      <span className={styles.breakdownLabel}>{formatLabel(label)}</span>
       <div className={styles.breakdownBar}>
         <div className={styles.breakdownFill} style={{ width: `${pct}%`, background: color }} />
       </div>

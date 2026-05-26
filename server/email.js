@@ -135,7 +135,7 @@ async function sendNewTicket({ to, firstName, reference, subject, description })
   });
 }
 
-async function sendAgentReply({ to, firstName, reference, ticketSubject, replyBody, history = [] }) {
+async function sendAgentReply({ to, firstName, reference, ticketSubject, replyBody, agentName = 'Support Agent', history = [] }) {
   // replyBody is HTML from the rich text editor — render it directly, don't escape
   const historyHtml = history.length ? `
     <div style="margin-top:28px;border-top:1px solid #e5e5e0;padding-top:20px;">
@@ -162,7 +162,7 @@ async function sendAgentReply({ to, firstName, reference, ticketSubject, replyBo
         <strong style="color:#374151;">${esc(ticketSubject)}</strong>.
       </p>
       <div style="border-left:3px solid #4F7FFF;padding:12px 16px;background:#f5f8ff;border-radius:0 6px 6px 0;margin-bottom:20px;">
-        <div style="font-size:12px;font-weight:700;color:#4F7FFF;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">Support Agent</div>
+        <div style="font-size:12px;font-weight:700;color:#4F7FFF;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">${esc(agentName)}</div>
         <div style="font-size:14px;color:#374151;line-height:1.65;">${inlineEmailStyles(replyBody)}</div>
       </div>
       ${portalButton(reference)}

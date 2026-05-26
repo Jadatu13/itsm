@@ -337,7 +337,7 @@ router.get('/:id/replies', async (req, res) => {
   try {
     const result = await db.query(
       `SELECT r.id, r.ticket_id, r.body, r.is_agent_reply, r.is_internal, r.created_at,
-              CASE WHEN r.is_agent_reply OR r.is_internal THEN 'Support Agent'
+              CASE WHEN r.is_agent_reply OR r.is_internal THEN COALESCE(r.sender_name, 'Support Agent')
                    ELSE c.first_name || ' ' || c.last_name
               END AS sender_name
        FROM ticket_replies r
@@ -369,11 +369,12 @@ router.post('/:id/replies', async (req, res) => {
     );
     if (!ticketCheck.rows.length) return res.status(404).json({ error: 'Ticket not found' });
 
+    const senderName = (isAgent || isInternal) ? (req.agent?.name || null) : null;
     const result = await db.query(
-      `INSERT INTO ticket_replies (ticket_id, body, is_agent_reply, is_internal)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO ticket_replies (ticket_id, body, is_agent_reply, is_internal, sender_name)
+       VALUES ($1, $2, $3, $4, $5)
        RETURNING *`,
-      [req.params.id, body, isAgent || isInternal, isInternal]
+      [req.params.id, body, isAgent || isInternal, isInternal, senderName]
     );
     res.status(201).json(result.rows[0]);
 
@@ -383,7 +384,7 @@ router.post('/:id/replies', async (req, res) => {
       // Fetch prior non-internal replies for the history thread (newest first, excluding the one just inserted)
       const historyResult = await db.query(
         `SELECT r.body, r.is_agent_reply, r.created_at,
-                CASE WHEN r.is_agent_reply THEN 'Support Agent'
+                CASE WHEN r.is_agent_reply THEN COALESCE(r.sender_name, 'Support Agent')
                      ELSE c.first_name || ' ' || c.last_name
                 END AS sender_name
          FROM ticket_replies r
@@ -401,6 +402,7 @@ router.post('/:id/replies', async (req, res) => {
         reference,
         ticketSubject: subject,
         replyBody:     body,
+        agentName:     req.agent?.name || 'Support Agent',
         history:       historyResult.rows,
       });
     }

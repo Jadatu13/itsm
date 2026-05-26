@@ -298,12 +298,13 @@ router.post('/service-catalog/:id/submit', portalAuth, async (req, res) => {
 
     // If approval not required but automation action exists, execute immediately
     if (!form.requires_approval && form.automation_action?.type && form.automation_action.type !== 'none') {
-      const { executeAutomation, checkUPNExists } = require('../graphExecutor');
+      const { executeAutomation } = require('../graphExecutor');
       const sr = srInsert.rows[0];
       executeAutomation(sr, form).then(async (result) => {
+        const status = result.noTenant ? 'no_tenant' : result.success ? 'completed' : 'failed';
         await db.query(
           `UPDATE service_requests SET execution_status = $1, execution_log = $2 WHERE id = $3`,
-          [result.success ? 'completed' : 'failed', JSON.stringify(result.log), sr.id]
+          [status, JSON.stringify(result.log), sr.id]
         );
       }).catch(err => console.error('[portal-auto-execute]', err));
     }
@@ -321,31 +322,14 @@ router.post('/service-catalog/:id/submit', portalAuth, async (req, res) => {
   }
 });
 
-// Resolve the right M365 tenant for a portal request:
-// 1. Tenant linked to the contact's organisation
-// 2. Tenant pinned to the form
-// 3. First connected tenant
-async function resolvePortalTenant(contactId, formId) {
-  // 1. Org-linked tenant
-  if (contactId) {
-    const cr = await db.query('SELECT organisation_id FROM contacts WHERE id = $1', [contactId]);
-    const orgId = cr.rows[0]?.organisation_id;
-    if (orgId) {
-      const tr = await db.query('SELECT * FROM m365_tenants WHERE organisation_id = $1 AND connected = true LIMIT 1', [orgId]);
-      if (tr.rows[0]) return tr.rows[0];
-    }
-  }
-  // 2. Form-pinned tenant
-  if (formId) {
-    const fr = await db.query('SELECT automation_tenant_id FROM service_request_forms WHERE id = $1', [formId]);
-    const tenantId = fr.rows[0]?.automation_tenant_id;
-    if (tenantId) {
-      const tr = await db.query('SELECT * FROM m365_tenants WHERE id = $1 AND connected = true', [tenantId]);
-      if (tr.rows[0]) return tr.rows[0];
-    }
-  }
-  // 3. First connected tenant
-  const tr = await db.query('SELECT * FROM m365_tenants WHERE connected = true ORDER BY created_at ASC LIMIT 1');
+// Resolve the M365 tenant for a portal request strictly by the contact's organisation.
+// Returns null if the org has no linked tenant (ticket-only path, no automation).
+async function resolvePortalTenant(contactId) {
+  if (!contactId) return null;
+  const cr = await db.query('SELECT organisation_id FROM contacts WHERE id = $1', [contactId]);
+  const orgId = cr.rows[0]?.organisation_id;
+  if (!orgId) return null;
+  const tr = await db.query('SELECT * FROM m365_tenants WHERE organisation_id = $1 AND connected = true LIMIT 1', [orgId]);
   return tr.rows[0] || null;
 }
 
@@ -353,7 +337,7 @@ async function resolvePortalTenant(contactId, formId) {
 router.get('/graph/users', portalAuth, async (req, res) => {
   const { form_id } = req.query;
   try {
-    const tenant = await resolvePortalTenant(req.contact?.id, form_id);
+    const tenant = await resolvePortalTenant(req.contact?.id);
     if (!tenant) return res.json({ users: [], connected: false });
 
     const tokenUrl = `https://login.microsoftonline.com/${tenant.tenant_id}/oauth2/v2.0/token`;
@@ -387,7 +371,7 @@ router.get('/graph/users', portalAuth, async (req, res) => {
 router.get('/graph/groups', portalAuth, async (req, res) => {
   const { form_id } = req.query;
   try {
-    const tenant = await resolvePortalTenant(req.contact?.id, form_id);
+    const tenant = await resolvePortalTenant(req.contact?.id);
     if (!tenant) return res.json({ groups: [], connected: false });
 
     const tokenUrl = `https://login.microsoftonline.com/${tenant.tenant_id}/oauth2/v2.0/token`;

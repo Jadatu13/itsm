@@ -824,20 +824,24 @@ async function executeAutomation(serviceRequest, form) {
   // Resolve field values → action params
   const params = resolveParams(automationAction, serviceRequest.field_values || {}, form.fields || []);
 
-  // Resolve tenant: org-linked tenant > form-pinned tenant > first connected tenant
+  // Resolve tenant strictly by the contact's organisation — no fallbacks.
+  // If the org has no linked M365 tenant, the form produces a ticket only.
   let tenant = null;
   let contactEmail = null;
+  let orgName = null;
   try {
-    // 1. Look up the contact's organisation and find the tenant linked to that org
     if (serviceRequest.contact_id) {
       const cr = await db.query(
-        `SELECT c.email, c.organisation_id
-         FROM contacts c WHERE c.id = $1`,
+        `SELECT c.email, c.organisation_id, o.name AS org_name
+         FROM contacts c
+         LEFT JOIN organisations o ON o.id = c.organisation_id
+         WHERE c.id = $1`,
         [serviceRequest.contact_id]
       );
       const contact = cr.rows[0];
       if (contact) {
         contactEmail = contact.email;
+        orgName = contact.org_name || null;
         if (contact.organisation_id) {
           const tr = await db.query(
             `SELECT * FROM m365_tenants WHERE organisation_id = $1 AND connected = true LIMIT 1`,
@@ -847,33 +851,18 @@ async function executeAutomation(serviceRequest, form) {
         }
       }
     }
-
-    // 2. Fall back to form's pinned tenant
-    if (!tenant) {
-      const tenantId = form.automation_tenant_id || serviceRequest.tenant_id;
-      if (tenantId) {
-        const r = await db.query('SELECT * FROM m365_tenants WHERE id = $1 AND connected = true', [tenantId]);
-        tenant = r.rows[0] || null;
-      }
-    }
-
-    // 3. Last resort: first connected tenant
-    if (!tenant) {
-      const r = await db.query('SELECT * FROM m365_tenants WHERE connected = true ORDER BY created_at ASC LIMIT 1');
-      tenant = r.rows[0] || null;
-    }
   } catch (_) { /* table may not exist yet */ }
 
-  // Fetch contact email if not already loaded above
-  if (!contactEmail && serviceRequest.contact_id) {
-    try {
-      const cr = await db.query('SELECT email FROM contacts WHERE id = $1', [serviceRequest.contact_id]);
-      contactEmail = cr.rows[0]?.email || null;
-    } catch (_) {}
-  }
-
   if (!tenant) {
-    return mockExecute(automationAction.type, params, contactEmail);
+    const msg = orgName
+      ? `No M365 tenant is linked to ${orgName}. Ticket logged for manual handling.`
+      : 'No M365 tenant linked to this organisation. Ticket logged for manual handling.';
+    return {
+      success: true,
+      noTenant: true,
+      orgName,
+      log: [{ level: 'info', message: msg, time: new Date().toISOString() }],
+    };
   }
 
   return liveExecute(tenant, automationAction.type, params, contactEmail);

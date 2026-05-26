@@ -11,13 +11,14 @@ function formatDate(d) {
 }
 
 const STATUS_META = {
-  pending:      { label: 'Pending Approval', color: '#F59E0B', bg: '#FEF3C7' },
-  approved:     { label: 'Approved',         color: '#059669', bg: '#D1FAE5' },
-  rejected:     { label: 'Rejected',         color: '#DC2626', bg: '#FEE2E2' },
-  executing:    { label: 'Executing…',       color: '#6366F1', bg: '#EEF2FF' },
-  completed:    { label: 'Completed',        color: '#059669', bg: '#D1FAE5' },
-  failed:       { label: 'Failed',           color: '#DC2626', bg: '#FEE2E2' },
+  pending:      { label: 'Pending Approval',   color: '#F59E0B', bg: '#FEF3C7' },
+  approved:     { label: 'Approved',           color: '#059669', bg: '#D1FAE5' },
+  rejected:     { label: 'Rejected',           color: '#DC2626', bg: '#FEE2E2' },
+  executing:    { label: 'Executing…',         color: '#6366F1', bg: '#EEF2FF' },
+  completed:    { label: 'Completed',          color: '#059669', bg: '#D1FAE5' },
+  failed:       { label: 'Failed',             color: '#DC2626', bg: '#FEE2E2' },
   not_required: { label: 'No Approval Needed', color: '#6B7280', bg: '#F3F4F6' },
+  no_tenant:    { label: 'Manual — No M365',   color: '#92400E', bg: '#FEF3C7' },
 }
 
 function StatusBadge({ status }) {
@@ -165,8 +166,15 @@ function RequestCard({ request, onApprove, onReject, onRerun, onRefresh }) {
         </div>
       )}
 
+      {/* No-tenant notice — shown inline, no log needed */}
+      {request.execution_status === 'no_tenant' && (
+        <div className={styles.noTenantNote}>
+          📋 No M365 tenant linked to this organisation — ticket is open for manual handling.
+        </div>
+      )}
+
       {/* Execution log toggle */}
-      {(request.execution_log?.length > 0 || request.execution_status) && (
+      {(request.execution_log?.length > 0 || request.execution_status) && request.execution_status !== 'no_tenant' && (
         <div>
           <button className={styles.logToggle} onClick={() => setExpanded(e => !e)}>
             {expanded ? '▲ Hide' : '▼ Show'} execution log

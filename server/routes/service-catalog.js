@@ -219,7 +219,7 @@ router.post('/submissions/:id/approve', async (req, res) => {
       const form = formResult.rows[0];
       const result = await executeAutomation(serviceRequest, form);
 
-      const finalStatus = result.success ? 'completed' : 'failed';
+      const finalStatus = result.noTenant ? 'no_tenant' : result.success ? 'completed' : 'failed';
       await db.query(
         `UPDATE service_requests SET execution_status = $1, execution_log = $2 WHERE id = $3`,
         [finalStatus, JSON.stringify(result.log), serviceRequest.id]
@@ -228,11 +228,14 @@ router.post('/submissions/:id/approve', async (req, res) => {
       // Post execution summary to ticket
       if (serviceRequest.ticket_id) {
         const successLines = result.log.filter(l => l.level === 'success').map(l => l.message).join('\n');
-        const summary = result.mock
-          ? `🔌 Simulation complete (no M365 tenant connected).\n${successLines || 'See execution log for details.'}`
-          : result.success
-            ? `✅ Automation executed successfully.\n${successLines}`
-            : `❌ Automation failed: ${result.error}\nCheck the execution log for details.`;
+        let summary;
+        if (result.noTenant) {
+          summary = `📋 No M365 tenant is configured for this organisation — this ticket has been logged for manual handling.`;
+        } else if (result.success) {
+          summary = `✅ Automation executed successfully.\n${successLines}`;
+        } else {
+          summary = `❌ Automation failed: ${result.error}\nCheck the execution log for details.`;
+        }
 
         const agentResult = await db.query('SELECT name FROM agents WHERE id = $1', [agentId]);
         await db.query(
@@ -241,8 +244,8 @@ router.post('/submissions/:id/approve', async (req, res) => {
           [serviceRequest.ticket_id, summary, agentResult.rows[0]?.name || 'Automation']
         );
 
-        // Close ticket if execution succeeded
-        if (result.success && !result.mock) {
+        // Close ticket only on successful live automation — leave open for manual handling otherwise
+        if (result.success && !result.noTenant) {
           await db.query(
             `UPDATE tickets SET status = 'resolved', updated_at = NOW() WHERE id = $1`,
             [serviceRequest.ticket_id]
@@ -301,7 +304,7 @@ router.post('/submissions/:id/rerun', async (req, res) => {
       const form = formResult.rows[0];
       const result = await executeAutomation(serviceRequest, form);
 
-      const finalStatus = result.success ? 'completed' : 'failed';
+      const finalStatus = result.noTenant ? 'no_tenant' : result.success ? 'completed' : 'failed';
       await db.query(
         `UPDATE service_requests
          SET execution_status = $1, execution_log = execution_log || $2::jsonb
@@ -311,17 +314,20 @@ router.post('/submissions/:id/rerun', async (req, res) => {
 
       if (serviceRequest.ticket_id) {
         const successLines = result.log.filter(l => l.level === 'success').map(l => l.message).join('\n');
-        const summary = result.mock
-          ? `🔌 Rerun simulation complete (no M365 tenant connected).`
-          : result.success
-            ? `✅ Automation rerun succeeded.\n${successLines}`
-            : `❌ Automation rerun failed: ${result.error}\nCheck the execution log for details.`;
+        let summary;
+        if (result.noTenant) {
+          summary = `📋 No M365 tenant configured for this organisation — ticket remains open for manual handling.`;
+        } else if (result.success) {
+          summary = `✅ Automation rerun succeeded.\n${successLines}`;
+        } else {
+          summary = `❌ Automation rerun failed: ${result.error}\nCheck the execution log for details.`;
+        }
         await db.query(
           `INSERT INTO ticket_replies (ticket_id, body, is_agent_reply, is_internal, sender_name)
            VALUES ($1, $2, true, true, $3)`,
           [serviceRequest.ticket_id, summary, agentName]
         );
-        if (result.success && !result.mock) {
+        if (result.success && !result.noTenant) {
           await db.query(
             `UPDATE tickets SET status = 'resolved', updated_at = NOW() WHERE id = $1`,
             [serviceRequest.ticket_id]

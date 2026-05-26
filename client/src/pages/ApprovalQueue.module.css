@@ -241,6 +241,16 @@
   margin-bottom: 10px;
 }
 
+.noTenantNote {
+  font-size: 13px;
+  color: #92400E;
+  background: #FFFBEB;
+  border: 1px solid #FDE68A;
+  border-radius: 6px;
+  padding: 10px 14px;
+  margin-bottom: 10px;
+}
+
 /* Execution log */
 .logToggle {
   background: none;

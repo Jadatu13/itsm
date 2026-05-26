@@ -1204,3 +1204,58 @@
   color: var(--portal-text-muted);
   text-align: center;
 }
+
+/* ── Catalog layout with sidebar ─────────────────────────────────────── */
+.catalogLayout {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: 24px;
+  align-items: start;
+}
+
+@media (max-width: 640px) {
+  .catalogLayout { grid-template-columns: 1fr; }
+}
+
+.catalogSidebar {
+  background: var(--portal-card-bg);
+  border-radius: var(--portal-radius);
+  box-shadow: var(--portal-shadow);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  position: sticky;
+  top: 74px;
+}
+
+.catalogSidebarItem {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 12px;
+  border: none;
+  background: transparent;
+  border-radius: 7px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--portal-text-muted);
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  transition: background .12s, color .12s;
+}
+
+.catalogSidebarItem:hover {
+  background: var(--portal-bg);
+  color: var(--portal-text);
+}
+
+.catalogSidebarItemActive {
+  background: #EEF2FF;
+  color: var(--portal-accent);
+}
+
+.catalogMain {
+  min-width: 0;
+}

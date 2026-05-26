@@ -225,6 +225,33 @@ const TEMPLATES = [
     },
   },
   {
+    key: 'cant_access_application', icon: '🔒', name: "Can't Access Application / System",
+    description: 'Report that you cannot access an application or system you need to do your work.',
+    tag: 'Incident — Access Issue',
+    build: () => {
+      const f = { app: uid(), type: uid(), what_happens: uid(), when: uid() }
+      return {
+        name: "Can't Access Application / System", icon: '🔒', category: 'incidents',
+        description: 'Report that you cannot access an application or system.',
+        ticket_priority: 'high', ticket_category: 'incidents',
+        ticket_subject_template: 'Access Issue — {{Application or System}}',
+        requires_approval: false, enabled: true, sort_order: 0,
+        fields: [
+          tf('text', f.app, 'Application or System', { required: true, placeholder: 'e.g. Xero, Outlook, VPN, SharePoint' }),
+          tf('select', f.type, 'Type of Issue', { required: true, options: [
+            { label: "I can't log in" },
+            { label: 'I get an error message' },
+            { label: 'I had access but it was removed' },
+            { label: 'I never had access but need it' },
+          ]}),
+          tf('textarea', f.what_happens, 'What happens when you try?', { required: true, placeholder: 'Describe the error or what you see on screen…' }),
+          tf('textarea', f.when, 'When did this start?', { required: true, placeholder: 'e.g. This morning, after a password change, after a system update…' }),
+        ],
+        automation_action: null,
+      }
+    },
+  },
+  {
     key: 'convert_to_shared_mailbox', icon: '🔄', name: 'Convert Mailbox to Shared',
     description: 'Convert a departing staff member\'s mailbox to a shared mailbox so the team can retain access.',
     tag: 'Convert Mailbox to Shared',
@@ -334,6 +361,62 @@ const TEMPLATES = [
     },
   },
   {
+    key: 'hardware_fault', icon: '🔧', name: 'Hardware Fault / Repair',
+    description: 'Report a fault with a physical device such as a laptop, monitor, or printer.',
+    tag: 'Incident — Hardware Fault',
+    build: () => {
+      const f = { device_type: uid(), asset_tag: uid(), fault_desc: uid(), urgency: uid() }
+      return {
+        name: 'Hardware Fault / Repair', icon: '🔧', category: 'hardware',
+        description: 'Report a fault with a physical device.',
+        ticket_priority: 'high', ticket_category: 'hardware',
+        ticket_subject_template: 'Hardware Fault — {{Device Type}}',
+        requires_approval: false, enabled: true, sort_order: 0,
+        fields: [
+          tf('select', f.device_type, 'Device Type', { required: true, options: [
+            { label: 'Laptop' },
+            { label: 'Desktop' },
+            { label: 'Monitor' },
+            { label: 'Keyboard / Mouse' },
+            { label: 'Printer / Scanner' },
+            { label: 'Phone / Mobile' },
+            { label: 'Other' },
+          ]}),
+          tf('text', f.asset_tag, 'Asset Tag / Serial Number', { placeholder: 'Found on a sticker on the device', helpText: 'Helps us identify your device quickly' }),
+          tf('textarea', f.fault_desc, 'Describe the Fault', { required: true, placeholder: 'What is the device doing or not doing? Any error messages?' }),
+          tf('select', f.urgency, 'How urgent is this?', { required: true, options: [
+            { label: 'I can still work (low priority)' },
+            { label: "It's slowing me down (medium)" },
+            { label: "I can't work at all (urgent)" },
+          ]}),
+        ],
+        automation_action: null,
+      }
+    },
+  },
+  {
+    key: 'install_software', icon: '💿', name: 'Install Software',
+    description: 'Request installation of software on your computer or device.',
+    tag: 'Software Request — Install',
+    build: () => {
+      const f = { software_name: uid(), version: uid(), device_name: uid(), reason: uid() }
+      return {
+        name: 'Install Software', icon: '💿', category: 'software',
+        description: 'Request installation of software on your device.',
+        ticket_priority: 'low', ticket_category: 'software',
+        ticket_subject_template: 'Install Software — {{Software Name}}',
+        requires_approval: true, enabled: true, sort_order: 0,
+        fields: [
+          tf('text', f.software_name, 'Software Name', { required: true, placeholder: 'e.g. Adobe Acrobat, Zoom, VS Code' }),
+          tf('text', f.version, 'Version (if specific)', { layout: 'half', placeholder: 'e.g. 2024, leave blank for latest' }),
+          tf('text', f.device_name, 'Your Computer / Device Name', { required: true, layout: 'half', placeholder: 'Found in System Settings → About' }),
+          tf('textarea', f.reason, 'Business Reason', { required: true, placeholder: 'Why do you need this software? What will you use it for?' }),
+        ],
+        automation_action: null,
+      }
+    },
+  },
+  {
     key: 'invite_guest', icon: '🤝', name: 'Invite Guest User',
     description: 'Send a B2B guest invitation to an external collaborator so they can access your M365 environment.',
     tag: 'Invite Guest User (B2B)',
@@ -352,6 +435,40 @@ const TEMPLATES = [
           tf('textarea', f.reason, 'Business Justification', { required: true, placeholder: 'Why does this person need access? Which resources will they use?' }),
         ],
         automation_action: { type: 'invite_guest', field_map: { guest_email: f.guest_email, guest_name: f.guest_name, message: f.message }, fixed_values: {} },
+      }
+    },
+  },
+  {
+    key: 'network_connectivity', icon: '🌐', name: 'Network / Connectivity Issue',
+    description: 'Report a problem with internet access, VPN, Wi-Fi, or internal network connectivity.',
+    tag: 'Incident — Network Issue',
+    build: () => {
+      const f = { problem_type: uid(), location: uid(), desc: uid(), affected: uid() }
+      return {
+        name: 'Network / Connectivity Issue', icon: '🌐', category: 'network',
+        description: 'Report a network or connectivity problem.',
+        ticket_priority: 'high', ticket_category: 'network',
+        ticket_subject_template: 'Network Issue — {{Type of Problem}}',
+        requires_approval: false, enabled: true, sort_order: 0,
+        fields: [
+          tf('select', f.problem_type, 'Type of Problem', { required: true, options: [
+            { label: 'No internet access' },
+            { label: 'Slow internet' },
+            { label: "Can't connect to VPN" },
+            { label: 'Wi-Fi keeps dropping' },
+            { label: "Can't reach internal systems / file shares" },
+            { label: 'Other' },
+          ]}),
+          tf('text', f.location, 'Your Location', { placeholder: 'e.g. Auckland Office – Level 2, Working from home' }),
+          tf('textarea', f.desc, 'Describe the Issue', { required: true, placeholder: 'What are you trying to do? What happens when you try?' }),
+          tf('select', f.affected, 'How many people are affected?', { required: true, options: [
+            { label: 'Just me' },
+            { label: 'My team / floor' },
+            { label: 'The whole office' },
+            { label: "I'm not sure" },
+          ]}),
+        ],
+        automation_action: null,
       }
     },
   },
@@ -397,6 +514,64 @@ const TEMPLATES = [
           tf('textarea', f.reason, 'Reason', { required: true, placeholder: 'e.g. Forgot password, account locked out…' }),
         ],
         automation_action: { type: 'reset_password', field_map: { email: f.email }, fixed_values: {} },
+      }
+    },
+  },
+  {
+    key: 'purchase_hardware', icon: '🖥️', name: 'Purchase New Hardware',
+    description: 'Request the purchase of new hardware such as a laptop, monitor, or peripheral.',
+    tag: 'Hardware Request — Purchase',
+    build: () => {
+      const f = { hw_type: uid(), specs: uid(), required_by: uid(), qty: uid(), justification: uid() }
+      return {
+        name: 'Purchase New Hardware', icon: '🖥️', category: 'hardware',
+        description: 'Request the purchase of new hardware.',
+        ticket_priority: 'medium', ticket_category: 'hardware',
+        ticket_subject_template: 'Hardware Request — {{Hardware Type}}',
+        requires_approval: true, enabled: true, sort_order: 0,
+        fields: [
+          tf('select', f.hw_type, 'Hardware Type', { required: true, options: [
+            { label: 'Laptop' },
+            { label: 'Desktop' },
+            { label: 'Monitor' },
+            { label: 'Keyboard / Mouse' },
+            { label: 'Headset' },
+            { label: 'Webcam' },
+            { label: 'Docking Station' },
+            { label: 'Phone / Mobile' },
+            { label: 'Printer' },
+            { label: 'Other' },
+          ]}),
+          tf('text', f.specs, 'Specifications / Model Preference', { placeholder: 'Any specific requirements? e.g. 16GB RAM, dual monitor setup' }),
+          tf('text', f.required_by, 'Required By Date', { layout: 'half', placeholder: 'e.g. 01/02/2025' }),
+          tf('number', f.qty, 'Quantity', { required: true, layout: 'half' }),
+          tf('textarea', f.justification, 'Business Justification', { required: true, placeholder: 'Why is this hardware needed? What will it be used for?' }),
+        ],
+        automation_action: null,
+      }
+    },
+  },
+  {
+    key: 'purchase_software', icon: '📦', name: 'Purchase New Software / License',
+    description: 'Request the purchase of new software or additional licenses for your team.',
+    tag: 'Software Request — Purchase',
+    build: () => {
+      const f = { sw_name: uid(), vendor: uid(), num_licenses: uid(), cost: uid(), justification: uid(), alternatives: uid() }
+      return {
+        name: 'Purchase New Software / License', icon: '📦', category: 'software',
+        description: 'Request the purchase of new software or additional licenses.',
+        ticket_priority: 'medium', ticket_category: 'software',
+        ticket_subject_template: 'Software Request — {{Software Name}}',
+        requires_approval: true, enabled: true, sort_order: 0,
+        fields: [
+          tf('text', f.sw_name, 'Software Name', { required: true, placeholder: 'e.g. Adobe Creative Cloud, Slack, Microsoft Project' }),
+          tf('text', f.vendor, 'Vendor / Website', { placeholder: 'e.g. adobe.com' }),
+          tf('number', f.num_licenses, 'Number of Licenses Needed', { required: true, layout: 'half' }),
+          tf('text', f.cost, 'Estimated Cost (per license)', { layout: 'half', placeholder: 'e.g. $25/month' }),
+          tf('textarea', f.justification, 'Business Justification', { required: true, placeholder: 'What will this software be used for? Why is it needed?' }),
+          tf('textarea', f.alternatives, 'Alternatives Considered', { placeholder: 'Have you looked at any other options?' }),
+        ],
+        automation_action: null,
       }
     },
   },
@@ -551,6 +726,41 @@ const TEMPLATES = [
     },
   },
   {
+    key: 'something_not_working', icon: '🛠️', name: "Something's Not Working",
+    description: 'Report a general IT issue when something has stopped working or is behaving unexpectedly.',
+    tag: "Incident — Something's Not Working",
+    build: () => {
+      const f = { what: uid(), issue_type: uid(), desc: uid(), steps_tried: uid(), urgency: uid() }
+      return {
+        name: "Something's Not Working", icon: '🛠️', category: 'incidents',
+        description: "Report a general IT issue when something has stopped working.",
+        ticket_priority: 'medium', ticket_category: 'incidents',
+        ticket_subject_template: "IT Issue — {{What's Not Working}}",
+        requires_approval: false, enabled: true, sort_order: 0,
+        fields: [
+          tf('text', f.what, "What's Not Working?", { required: true, placeholder: 'e.g. Outlook keeps crashing, printer won\'t connect, Teams calls have no audio' }),
+          tf('select', f.issue_type, 'Type of Issue', { required: true, options: [
+            { label: 'Application / Software' },
+            { label: 'Computer / Hardware' },
+            { label: 'Email' },
+            { label: 'Printing / Scanning' },
+            { label: 'Audio / Video' },
+            { label: 'Microsoft Teams' },
+            { label: 'Other' },
+          ]}),
+          tf('textarea', f.desc, 'Describe the Problem', { required: true, placeholder: 'What exactly happens? Any error messages? When did it start?' }),
+          tf('textarea', f.steps_tried, 'Steps Already Tried', { placeholder: 'e.g. Restarted the computer, cleared cache, reinstalled the app…' }),
+          tf('select', f.urgency, 'How urgent is this?', { required: true, options: [
+            { label: 'I have a workaround (low)' },
+            { label: "It's affecting my work (medium)" },
+            { label: "I can't work at all (urgent)" },
+          ]}),
+        ],
+        automation_action: null,
+      }
+    },
+  },
+  {
     key: 'update_user', icon: '✏️', name: 'Update User Profile',
     description: 'Update a staff member\'s job title, department, office location, phone number or manager in Entra ID.',
     tag: 'Update User Profile',
@@ -575,6 +785,36 @@ const TEMPLATES = [
       }
     },
   },
+  {
+    key: 'vpn_remote_access', icon: '🔑', name: 'VPN / Remote Access Issue',
+    description: 'Report a problem connecting to VPN or accessing internal systems remotely.',
+    tag: 'Incident — VPN Issue',
+    build: () => {
+      const f = { problem: uid(), vpn_client: uid(), os: uid(), location: uid(), error_msg: uid() }
+      return {
+        name: 'VPN / Remote Access Issue', icon: '🔑', category: 'network',
+        description: 'Report a problem connecting to VPN or remote access systems.',
+        ticket_priority: 'high', ticket_category: 'network',
+        ticket_subject_template: 'VPN Issue — {{Your Name}}',
+        requires_approval: false, enabled: true, sort_order: 0,
+        fields: [
+          tf('select', f.problem, "What's the problem?", { required: true, options: [
+            { label: "Can't connect to VPN at all" },
+            { label: "VPN connects but I can't reach internal systems" },
+            { label: 'VPN keeps disconnecting' },
+            { label: 'Slow performance over VPN' },
+            { label: 'MFA / authentication not working for VPN' },
+            { label: 'Other' },
+          ]}),
+          tf('text', f.vpn_client, 'VPN Client / Software', { placeholder: 'e.g. GlobalProtect, Cisco AnyConnect, built-in Windows VPN' }),
+          tf('text', f.os, 'Operating System', { layout: 'half', placeholder: 'e.g. Windows 11, macOS Sonoma' }),
+          tf('text', f.location, 'Your Location', { layout: 'half', placeholder: 'e.g. Home, café, hotel' }),
+          tf('textarea', f.error_msg, 'Error Message (if any)', { placeholder: 'Copy the exact error message here if you see one' }),
+        ],
+        automation_action: null,
+      }
+    },
+  },
 ]
 
 const ICONS = ['📋', '💻', '📧', '👤', '🔒', '🗂', '🖨', '📞', '🌐', '⚙️']
@@ -585,6 +825,7 @@ const CATEGORIES = [
   { value: 'software', label: 'Software' },
   { value: 'account_management', label: 'Account Management' },
   { value: 'network', label: 'Network' },
+  { value: 'incidents', label: 'Report an Issue' },
   { value: 'other', label: 'Other' },
 ]
 const PRIORITIES = ['low', 'medium', 'high']
@@ -1326,46 +1567,66 @@ export default function ServiceCatalog() {
       ) : activeTab === 'forms' ? (
         forms.length === 0 ? (
           <div className={styles.emptyState}>No forms yet. Create one with "New Form".</div>
-        ) : (
-          <div className={styles.formsGrid}>
-            {forms.map(f => (
-              <div key={f.id} className={styles.formCard}>
-                <div className={styles.formCardHeader}>
-                  <span className={styles.formIcon}>{f.icon || '📋'}</span>
-                  <div className={styles.formMeta}>
-                    <p className={styles.formName}>{f.name}</p>
-                    {f.description && <p className={styles.formDesc}>{f.description}</p>}
+        ) : (() => {
+          const categories = [
+            { value: 'account_management', label: 'Account Management', icon: '👤' },
+            { value: 'access_permissions', label: 'Access & Permissions', icon: '🔐' },
+            { value: 'hardware',           label: 'Hardware',            icon: '💻' },
+            { value: 'incidents',          label: 'Report an Issue',     icon: '🚨' },
+            { value: 'network',            label: 'Network',             icon: '🌐' },
+            { value: 'software',           label: 'Software',            icon: '📦' },
+            { value: 'general',            label: 'General',             icon: '🗂️' },
+            { value: 'other',              label: 'Other',               icon: '⚙️' },
+          ]
+          const groupedForms = categories
+            .map(cat => ({ ...cat, forms: forms.filter(f => f.category === cat.value) }))
+            .filter(group => group.forms.length > 0)
+          const uncategorised = forms.filter(f => !categories.some(c => c.value === f.category))
+          if (uncategorised.length > 0) groupedForms.push({ value: '_other', label: 'Uncategorised', icon: '📋', forms: uncategorised })
+          return groupedForms.map(group => (
+            <div key={group.value} className={styles.categorySection}>
+              <h2 className={styles.categorySectionTitle}>{group.icon} {group.label}</h2>
+              <div className={styles.formsGrid}>
+                {group.forms.map(f => (
+                  <div key={f.id} className={styles.formCard}>
+                    <div className={styles.formCardHeader}>
+                      <span className={styles.formIcon}>{f.icon || '📋'}</span>
+                      <div className={styles.formMeta}>
+                        <p className={styles.formName}>{f.name}</p>
+                        {f.description && <p className={styles.formDesc}>{f.description}</p>}
+                      </div>
+                    </div>
+                    <div className={styles.formCardFooter}>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <span className={`${styles.badge} ${f.enabled ? styles.badgeEnabled : styles.badgeDisabled}`}>
+                          {f.enabled ? 'Enabled' : 'Disabled'}
+                        </span>
+                        <span className={styles.fieldCount}>
+                          {Array.isArray(f.fields) ? f.fields.length : 0} fields
+                        </span>
+                        {f.automation_action?.type && f.automation_action.type !== 'none' && (
+                          <span className={styles.automationBadge} title={`Auto: ${f.automation_action.type.replace(/_/g, ' ')}`}>
+                            ⚙️ {f.automation_action.type.replace(/_/g, ' ')}
+                          </span>
+                        )}
+                        {f.requires_approval && (
+                          <span className={styles.approvalBadge}>⏳ Approval</span>
+                        )}
+                      </div>
+                      <div className={styles.formCardActions}>
+                        <button className={styles.btnIconSm} onClick={() => handleToggle(f.id)}>
+                          {f.enabled ? 'Disable' : 'Enable'}
+                        </button>
+                        <button className={styles.btnIconSm} onClick={() => openEdit(f)}>Edit</button>
+                        <button className={`${styles.btnIconSm} ${styles.btnDanger}`} onClick={() => setConfirmDelete(f.id)}>Delete</button>
+                      </div>
+                    </div>
                   </div>
-                </div>
-                <div className={styles.formCardFooter}>
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                    <span className={`${styles.badge} ${f.enabled ? styles.badgeEnabled : styles.badgeDisabled}`}>
-                      {f.enabled ? 'Enabled' : 'Disabled'}
-                    </span>
-                    <span className={styles.fieldCount}>
-                      {Array.isArray(f.fields) ? f.fields.length : 0} fields
-                    </span>
-                    {f.automation_action?.type && f.automation_action.type !== 'none' && (
-                      <span className={styles.automationBadge} title={`Auto: ${f.automation_action.type.replace(/_/g, ' ')}`}>
-                        ⚙️ {f.automation_action.type.replace(/_/g, ' ')}
-                      </span>
-                    )}
-                    {f.requires_approval && (
-                      <span className={styles.approvalBadge}>⏳ Approval</span>
-                    )}
-                  </div>
-                  <div className={styles.formCardActions}>
-                    <button className={styles.btnIconSm} onClick={() => handleToggle(f.id)}>
-                      {f.enabled ? 'Disable' : 'Enable'}
-                    </button>
-                    <button className={styles.btnIconSm} onClick={() => openEdit(f)}>Edit</button>
-                    <button className={`${styles.btnIconSm} ${styles.btnDanger}`} onClick={() => setConfirmDelete(f.id)}>Delete</button>
-                  </div>
-                </div>
+                ))}
               </div>
-            ))}
-          </div>
-        )
+            </div>
+          ))
+        })()
       ) : (
         submissions.length === 0 ? (
           <div className={styles.emptyState}>No submissions yet.</div>

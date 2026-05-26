@@ -913,3 +913,20 @@
   font-style: italic;
   margin-left: 8px;
 }
+
+/* ── Category sections ───────────────────────────────────────────────── */
+.categorySection {
+  margin-bottom: 32px;
+}
+
+.categorySectionTitle {
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+  margin: 0 0 12px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}

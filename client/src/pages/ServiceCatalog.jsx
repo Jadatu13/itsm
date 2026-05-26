@@ -46,6 +46,56 @@ const ACTION_TYPES = {
   enable_account:          { label: 'Enable User Account',           params: [
     { key: 'email', label: 'User Email / UPN', required: true },
   ]},
+  assign_license:          { label: 'Assign M365 License',            params: [
+    { key: 'email',       label: 'User Email / UPN',            required: true  },
+    { key: 'license_sku', label: 'License SKU',                 required: true  },
+  ]},
+  remove_license:          { label: 'Remove M365 License',            params: [
+    { key: 'email',       label: 'User Email / UPN',            required: true  },
+    { key: 'license_sku', label: 'License SKU to Remove',       required: true  },
+  ]},
+  update_user:             { label: 'Update User Profile',            params: [
+    { key: 'email',           label: 'User Email / UPN',    required: true  },
+    { key: 'job_title',       label: 'Job Title',           required: false },
+    { key: 'department',      label: 'Department',          required: false },
+    { key: 'office_location', label: 'Office Location',     required: false },
+    { key: 'mobile_phone',    label: 'Mobile Phone',        required: false },
+    { key: 'manager_email',   label: 'Manager Email / UPN', required: false },
+  ]},
+  reset_mfa:               { label: 'Reset MFA Methods',              params: [
+    { key: 'email', label: 'User Email / UPN', required: true },
+  ]},
+  invite_guest:            { label: 'Invite Guest User (B2B)',         params: [
+    { key: 'guest_email', label: 'Guest Email Address', required: true  },
+    { key: 'guest_name',  label: 'Guest Display Name',  required: true  },
+    { key: 'message',     label: 'Personal Message',    required: false },
+  ]},
+  add_email_alias:         { label: 'Add Email Alias',                 params: [
+    { key: 'email', label: 'User Email / UPN',    required: true },
+    { key: 'alias', label: 'Alias Email Address', required: true },
+  ]},
+  set_out_of_office:       { label: 'Set Out of Office / Auto-Reply',  params: [
+    { key: 'email',      label: 'User Email / UPN',       required: true  },
+    { key: 'message',    label: 'Auto-Reply Message',      required: true  },
+    { key: 'start_date', label: 'Start Date (YYYY-MM-DD)', required: false },
+    { key: 'end_date',   label: 'End Date (YYYY-MM-DD)',   required: false },
+  ]},
+  create_security_group:   { label: 'Create Security Group',           params: [
+    { key: 'group_name',  label: 'Group Name',  required: true  },
+    { key: 'description', label: 'Description', required: false },
+  ]},
+  assign_admin_role:       { label: 'Assign Admin Role',               params: [
+    { key: 'email',     label: 'User Email / UPN', required: true },
+    { key: 'role_name', label: 'Admin Role',        required: true },
+  ]},
+  remove_admin_role:       { label: 'Remove Admin Role',               params: [
+    { key: 'email',     label: 'User Email / UPN', required: true },
+    { key: 'role_name', label: 'Admin Role',        required: true },
+  ]},
+  convert_to_shared_mailbox: { label: 'Convert Mailbox to Shared',     params: [
+    { key: 'email',          label: 'User Email / UPN',          required: true  },
+    { key: 'delegate_email', label: 'Grant Access To (optional)', required: false },
+  ]},
 }
 
 // ── Template helpers ──────────────────────────────────────────────────────────
@@ -64,7 +114,53 @@ function tf(type, id, label, opts = {}) {
   }
 }
 
+const ADMIN_ROLES = [
+  'Helpdesk Administrator',
+  'License Administrator',
+  'Groups Administrator',
+  'User Administrator',
+  'Exchange Administrator',
+  'Teams Administrator',
+  'SharePoint Administrator',
+  'Security Administrator',
+  'Compliance Administrator',
+  'Password Administrator',
+  'Global Administrator',
+]
+
+const LICENSE_SKUS = [
+  { label: 'Microsoft 365 Business Basic',    value: 'O365_BUSINESS_ESSENTIALS' },
+  { label: 'Microsoft 365 Business Standard', value: 'O365_BUSINESS_PREMIUM' },
+  { label: 'Microsoft 365 Business Premium',  value: 'SPB' },
+  { label: 'Microsoft 365 E3',                value: 'SPE_E3' },
+  { label: 'Microsoft 365 E5',                value: 'SPE_E5' },
+  { label: 'Microsoft Teams Essentials',      value: 'TEAMS_ESSENTIALS' },
+  { label: 'Exchange Online Plan 1',          value: 'EXCHANGESTANDARD' },
+  { label: 'Exchange Online Plan 2',          value: 'EXCHANGEENTERPRISE' },
+]
+
 const TEMPLATES = [
+  {
+    key: 'add_email_alias', icon: '📮', name: 'Add Email Alias',
+    description: 'Add an additional email address (alias) to an existing staff member\'s mailbox.',
+    tag: 'Add Email Alias',
+    build: () => {
+      const f = { email: uid(), alias: uid(), reason: uid() }
+      return {
+        name: 'Add Email Alias', icon: '📮', category: 'access_permissions',
+        description: 'Add an alternate email address to a staff member\'s mailbox.',
+        ticket_priority: 'low', ticket_category: 'access_permissions',
+        ticket_subject_template: 'Add Email Alias — {{Staff Member}}',
+        requires_approval: true, enabled: true, sort_order: 0,
+        fields: [
+          tf('user_picker', f.email, 'Staff Member', { required: true, helpText: 'Select the user to add an alias for' }),
+          tf('text', f.alias, 'Alias Email Address', { required: true, placeholder: 'e.g. j.smith@yourdomain.com', helpText: 'The additional email address to add' }),
+          tf('textarea', f.reason, 'Reason', { placeholder: 'e.g. Name change, role alias…' }),
+        ],
+        automation_action: { type: 'add_email_alias', field_map: { email: f.email, alias: f.alias }, fixed_values: {} },
+      }
+    },
+  },
   {
     key: 'add_to_group', icon: '👥', name: 'Add Users to Group / Team',
     description: 'Add one or more staff members to an M365 Group or Teams channel.',
@@ -83,6 +179,90 @@ const TEMPLATES = [
           tf('textarea', f.notes, 'Notes', { placeholder: 'Any additional context…' }),
         ],
         automation_action: { type: 'add_to_group', field_map: { group_name: f.group_name, user_email: f.users }, fixed_values: {} },
+      }
+    },
+  },
+  {
+    key: 'assign_admin_role', icon: '🛡️', name: 'Assign Admin Role',
+    description: 'Grant a staff member an administrative role in Entra ID / Microsoft 365.',
+    tag: 'Assign Admin Role',
+    build: () => {
+      const f = { email: uid(), role: uid(), reason: uid() }
+      return {
+        name: 'Assign Admin Role', icon: '🛡️', category: 'access_permissions',
+        description: 'Assign an Entra ID administrative role to a staff member.',
+        ticket_priority: 'high', ticket_category: 'access_permissions',
+        ticket_subject_template: 'Assign Admin Role — {{Staff Member}}',
+        requires_approval: true, enabled: true, sort_order: 0,
+        fields: [
+          tf('user_picker', f.email, 'Staff Member', { required: true, helpText: 'Select the user to receive the admin role' }),
+          tf('select', f.role, 'Admin Role', { required: true, options: ADMIN_ROLES.map(r => ({ label: r })), helpText: 'Select the role to assign. Global Administrator grants full tenant access.' }),
+          tf('textarea', f.reason, 'Justification', { required: true, placeholder: 'Why does this person require admin access?' }),
+        ],
+        automation_action: { type: 'assign_admin_role', field_map: { email: f.email, role_name: f.role }, fixed_values: {} },
+      }
+    },
+  },
+  {
+    key: 'assign_license', icon: '🪪', name: 'Assign M365 License',
+    description: 'Assign a Microsoft 365 license to a staff member — for new accounts or upgrading an existing user.',
+    tag: 'Assign M365 License',
+    build: () => {
+      const f = { email: uid(), license: uid(), notes: uid() }
+      return {
+        name: 'Assign M365 License', icon: '🪪', category: 'account_management',
+        description: 'Assign a Microsoft 365 license to a staff member.',
+        ticket_priority: 'medium', ticket_category: 'account_management',
+        ticket_subject_template: 'Assign License — {{Staff Member}}',
+        requires_approval: true, enabled: true, sort_order: 0,
+        fields: [
+          tf('user_picker', f.email, 'Staff Member', { required: true, helpText: 'Select the user to assign a license to' }),
+          tf('select', f.license, 'License', { required: true, options: LICENSE_SKUS, helpText: 'Select the license to assign. SKU names may vary — check your M365 admin centre if unsure.' }),
+          tf('textarea', f.notes, 'Notes', { placeholder: 'Any additional context…' }),
+        ],
+        automation_action: { type: 'assign_license', field_map: { email: f.email, license_sku: f.license }, fixed_values: {} },
+      }
+    },
+  },
+  {
+    key: 'convert_to_shared_mailbox', icon: '🔄', name: 'Convert Mailbox to Shared',
+    description: 'Convert a departing staff member\'s mailbox to a shared mailbox so the team can retain access.',
+    tag: 'Convert Mailbox to Shared',
+    build: () => {
+      const f = { email: uid(), delegate: uid(), reason: uid() }
+      return {
+        name: 'Convert Mailbox to Shared', icon: '🔄', category: 'access_permissions',
+        description: 'Convert a user mailbox to a shared mailbox and optionally delegate access.',
+        ticket_priority: 'medium', ticket_category: 'access_permissions',
+        ticket_subject_template: 'Convert Mailbox — {{Staff Member}}',
+        requires_approval: true, enabled: true, sort_order: 0,
+        fields: [
+          tf('user_picker', f.email, 'Staff Member', { required: true, helpText: 'The user whose mailbox should be converted to shared' }),
+          tf('user_picker', f.delegate, 'Delegate Access To', { helpText: 'Optionally grant a team member access to the shared mailbox after conversion' }),
+          tf('textarea', f.reason, 'Reason', { required: true, placeholder: 'e.g. Staff member has left, team needs to retain email access…' }),
+        ],
+        automation_action: { type: 'convert_to_shared_mailbox', field_map: { email: f.email, delegate_email: f.delegate }, fixed_values: {} },
+      }
+    },
+  },
+  {
+    key: 'create_security_group', icon: '🔐', name: 'Create Security Group',
+    description: 'Create a new Entra ID security group for access control, conditional access policies or app assignments.',
+    tag: 'Create Security Group',
+    build: () => {
+      const f = { name: uid(), description: uid(), owner: uid() }
+      return {
+        name: 'Create Security Group', icon: '🔐', category: 'access_permissions',
+        description: 'Create a new Entra ID security group.',
+        ticket_priority: 'medium', ticket_category: 'access_permissions',
+        ticket_subject_template: 'New Security Group — {{Group Name}}',
+        requires_approval: true, enabled: true, sort_order: 0,
+        fields: [
+          tf('text', f.name, 'Group Name', { required: true, placeholder: 'e.g. VPN Access — Auckland Office', helpText: 'Use a clear, descriptive name that explains the group\'s purpose' }),
+          tf('textarea', f.description, 'Purpose / Description', { required: true, placeholder: 'What will this group be used for? Which resources will it control access to?' }),
+          tf('user_picker', f.owner, 'Group Owner', { helpText: 'Optionally assign an owner who will manage membership' }),
+        ],
+        automation_action: { type: 'create_security_group', field_map: { group_name: f.name, description: f.description }, fixed_values: {} },
       }
     },
   },
@@ -154,6 +334,28 @@ const TEMPLATES = [
     },
   },
   {
+    key: 'invite_guest', icon: '🤝', name: 'Invite Guest User',
+    description: 'Send a B2B guest invitation to an external collaborator so they can access your M365 environment.',
+    tag: 'Invite Guest User (B2B)',
+    build: () => {
+      const f = { guest_email: uid(), guest_name: uid(), message: uid(), reason: uid() }
+      return {
+        name: 'Invite Guest User', icon: '🤝', category: 'access_permissions',
+        description: 'Send a B2B guest invitation to an external collaborator.',
+        ticket_priority: 'medium', ticket_category: 'access_permissions',
+        ticket_subject_template: 'Guest Invitation — {{Guest Name}}',
+        requires_approval: true, enabled: true, sort_order: 0,
+        fields: [
+          tf('text', f.guest_name, 'Guest Name', { required: true, layout: 'half', placeholder: 'e.g. Jane Smith' }),
+          tf('text', f.guest_email, 'Guest Email Address', { required: true, layout: 'half', placeholder: 'e.g. jane@externalcompany.com', helpText: 'Must be a valid external email address' }),
+          tf('textarea', f.message, 'Personal Message', { placeholder: 'Optional welcome message to include in the invitation email…' }),
+          tf('textarea', f.reason, 'Business Justification', { required: true, placeholder: 'Why does this person need access? Which resources will they use?' }),
+        ],
+        automation_action: { type: 'invite_guest', field_map: { guest_email: f.guest_email, guest_name: f.guest_name, message: f.message }, fixed_values: {} },
+      }
+    },
+  },
+  {
     key: 'new_staff', icon: '🧑‍💼', name: 'New Staff Member',
     description: 'Onboard a new staff member with an Entra ID account. Email is auto-generated from the submitter\'s organisation domain.',
     tag: 'Create Entra ID User',
@@ -219,6 +421,48 @@ const TEMPLATES = [
     },
   },
   {
+    key: 'remove_admin_role', icon: '🛡️', name: 'Remove Admin Role',
+    description: 'Remove an administrative role from a staff member in Entra ID / Microsoft 365.',
+    tag: 'Remove Admin Role',
+    build: () => {
+      const f = { email: uid(), role: uid(), reason: uid() }
+      return {
+        name: 'Remove Admin Role', icon: '🛡️', category: 'access_permissions',
+        description: 'Remove an Entra ID administrative role from a staff member.',
+        ticket_priority: 'high', ticket_category: 'access_permissions',
+        ticket_subject_template: 'Remove Admin Role — {{Staff Member}}',
+        requires_approval: true, enabled: true, sort_order: 0,
+        fields: [
+          tf('user_picker', f.email, 'Staff Member', { required: true, helpText: 'Select the user to remove the admin role from' }),
+          tf('select', f.role, 'Admin Role to Remove', { required: true, options: ADMIN_ROLES.map(r => ({ label: r })) }),
+          tf('textarea', f.reason, 'Reason', { required: true, placeholder: 'e.g. Role change, no longer requires admin access…' }),
+        ],
+        automation_action: { type: 'remove_admin_role', field_map: { email: f.email, role_name: f.role }, fixed_values: {} },
+      }
+    },
+  },
+  {
+    key: 'remove_license', icon: '🪪', name: 'Remove M365 License',
+    description: 'Remove a Microsoft 365 license from a staff member — for departing staff or cost management.',
+    tag: 'Remove M365 License',
+    build: () => {
+      const f = { email: uid(), license: uid(), reason: uid() }
+      return {
+        name: 'Remove M365 License', icon: '🪪', category: 'account_management',
+        description: 'Remove a Microsoft 365 license from a staff member.',
+        ticket_priority: 'medium', ticket_category: 'account_management',
+        ticket_subject_template: 'Remove License — {{Staff Member}}',
+        requires_approval: true, enabled: true, sort_order: 0,
+        fields: [
+          tf('user_picker', f.email, 'Staff Member', { required: true, helpText: 'Select the user to remove a license from' }),
+          tf('select', f.license, 'License to Remove', { required: true, options: LICENSE_SKUS, helpText: 'Select the license to remove' }),
+          tf('textarea', f.reason, 'Reason', { required: true, placeholder: 'e.g. Staff member left, downgrading plan…' }),
+        ],
+        automation_action: { type: 'remove_license', field_map: { email: f.email, license_sku: f.license }, fixed_values: {} },
+      }
+    },
+  },
+  {
     key: 'remove_mailbox_permission', icon: '🔓', name: 'Remove Mailbox Access',
     description: 'Revoke a staff member\'s access to a shared or delegated mailbox.',
     tag: 'Remove Mailbox Permission',
@@ -261,6 +505,73 @@ const TEMPLATES = [
           tf('textarea', f.reason, 'Reason', { placeholder: 'e.g. Role change, no longer requires access…' }),
         ],
         automation_action: { type: 'remove_from_group', field_map: { group_name: f.group_name, user_email: f.users }, fixed_values: {} },
+      }
+    },
+  },
+  {
+    key: 'reset_mfa', icon: '📱', name: 'Reset MFA Methods',
+    description: 'Clear all MFA authentication methods for a staff member so they can re-register — for new phones or locked-out accounts.',
+    tag: 'Reset MFA Methods',
+    build: () => {
+      const f = { email: uid(), reason: uid() }
+      return {
+        name: 'Reset MFA Methods', icon: '📱', category: 'account_management',
+        description: 'Remove all MFA methods so the staff member must re-register on next sign-in.',
+        ticket_priority: 'high', ticket_category: 'account_management',
+        ticket_subject_template: 'MFA Reset — {{Staff Member}}',
+        requires_approval: true, enabled: true, sort_order: 0,
+        fields: [
+          tf('user_picker', f.email, 'Staff Member', { required: true, helpText: 'Select the user who needs MFA reset' }),
+          tf('textarea', f.reason, 'Reason', { required: true, placeholder: 'e.g. New phone, lost device, unable to sign in…' }),
+        ],
+        automation_action: { type: 'reset_mfa', field_map: { email: f.email }, fixed_values: {} },
+      }
+    },
+  },
+  {
+    key: 'set_out_of_office', icon: '🏖️', name: 'Set Out of Office',
+    description: 'Configure an automatic email reply for a staff member who is away or on leave.',
+    tag: 'Set Out of Office / Auto-Reply',
+    build: () => {
+      const f = { email: uid(), message: uid(), start: uid(), end: uid() }
+      return {
+        name: 'Set Out of Office', icon: '🏖️', category: 'account_management',
+        description: 'Set an automatic out-of-office reply for a staff member.',
+        ticket_priority: 'low', ticket_category: 'account_management',
+        ticket_subject_template: 'Out of Office — {{Staff Member}}',
+        requires_approval: false, enabled: true, sort_order: 0,
+        fields: [
+          tf('user_picker', f.email, 'Staff Member', { required: true, helpText: 'Select the user to configure auto-reply for' }),
+          tf('date', f.start, 'Start Date', { required: true, layout: 'half' }),
+          tf('date', f.end, 'End Date', { layout: 'half', helpText: 'Leave blank to keep active indefinitely' }),
+          tf('textarea', f.message, 'Auto-Reply Message', { required: true, placeholder: 'e.g. I\'m out of office from [date] to [date]. For urgent matters please contact…' }),
+        ],
+        automation_action: { type: 'set_out_of_office', field_map: { email: f.email, message: f.message, start_date: f.start, end_date: f.end }, fixed_values: {} },
+      }
+    },
+  },
+  {
+    key: 'update_user', icon: '✏️', name: 'Update User Profile',
+    description: 'Update a staff member\'s job title, department, office location, phone number or manager in Entra ID.',
+    tag: 'Update User Profile',
+    build: () => {
+      const f = { email: uid(), job_title: uid(), department: uid(), office: uid(), phone: uid(), manager: uid(), reason: uid() }
+      return {
+        name: 'Update User Profile', icon: '✏️', category: 'account_management',
+        description: 'Update profile attributes for an existing Entra ID user.',
+        ticket_priority: 'low', ticket_category: 'account_management',
+        ticket_subject_template: 'Update Profile — {{Staff Member}}',
+        requires_approval: false, enabled: true, sort_order: 0,
+        fields: [
+          tf('user_picker', f.email, 'Staff Member', { required: true, helpText: 'Select the user whose profile needs updating' }),
+          tf('text', f.job_title, 'New Job Title', { layout: 'half', placeholder: 'Leave blank to keep unchanged' }),
+          tf('text', f.department, 'New Department', { layout: 'half', placeholder: 'Leave blank to keep unchanged' }),
+          tf('text', f.office, 'Office Location', { layout: 'half', placeholder: 'e.g. Auckland HQ' }),
+          tf('text', f.phone, 'Mobile Phone', { layout: 'half', placeholder: 'e.g. +64 21 123 4567' }),
+          tf('user_picker', f.manager, 'New Manager', { helpText: 'Select the new manager — leave blank to keep unchanged' }),
+          tf('textarea', f.reason, 'Reason for Change', { required: true, placeholder: 'e.g. Promotion, internal transfer, name change…' }),
+        ],
+        automation_action: { type: 'update_user', field_map: { email: f.email, job_title: f.job_title, department: f.department, office_location: f.office, mobile_phone: f.phone, manager_email: f.manager }, fixed_values: {} },
       }
     },
   },

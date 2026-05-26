@@ -78,6 +78,89 @@ const ACTION_TYPES = {
       { key: 'email', label: 'User Email / UPN', required: true },
     ],
   },
+  assign_license: {
+    label: 'Assign M365 License',
+    params: [
+      { key: 'email',       label: 'User Email / UPN', required: true },
+      { key: 'license_sku', label: 'License SKU (e.g. SPB, SPE3)', required: true },
+    ],
+  },
+  remove_license: {
+    label: 'Remove M365 License',
+    params: [
+      { key: 'email',       label: 'User Email / UPN', required: true },
+      { key: 'license_sku', label: 'License SKU to Remove', required: true },
+    ],
+  },
+  update_user: {
+    label: 'Update User Profile',
+    params: [
+      { key: 'email',           label: 'User Email / UPN',    required: true  },
+      { key: 'job_title',       label: 'Job Title',           required: false },
+      { key: 'department',      label: 'Department',          required: false },
+      { key: 'office_location', label: 'Office Location',     required: false },
+      { key: 'mobile_phone',    label: 'Mobile Phone',        required: false },
+      { key: 'manager_email',   label: 'Manager Email / UPN', required: false },
+    ],
+  },
+  reset_mfa: {
+    label: 'Reset MFA Methods',
+    params: [
+      { key: 'email', label: 'User Email / UPN', required: true },
+    ],
+  },
+  invite_guest: {
+    label: 'Invite Guest User (B2B)',
+    params: [
+      { key: 'guest_email', label: 'Guest Email Address',    required: true  },
+      { key: 'guest_name',  label: 'Guest Display Name',     required: true  },
+      { key: 'message',     label: 'Personal Message',       required: false },
+    ],
+  },
+  add_email_alias: {
+    label: 'Add Email Alias',
+    params: [
+      { key: 'email', label: 'User Email / UPN', required: true },
+      { key: 'alias', label: 'Alias Email Address', required: true },
+    ],
+  },
+  set_out_of_office: {
+    label: 'Set Out of Office / Auto-Reply',
+    params: [
+      { key: 'email',      label: 'User Email / UPN',       required: true  },
+      { key: 'message',    label: 'Auto-Reply Message',      required: true  },
+      { key: 'start_date', label: 'Start Date (YYYY-MM-DD)', required: false },
+      { key: 'end_date',   label: 'End Date (YYYY-MM-DD)',   required: false },
+    ],
+  },
+  create_security_group: {
+    label: 'Create Security Group',
+    params: [
+      { key: 'group_name',  label: 'Group Name',   required: true  },
+      { key: 'description', label: 'Description',  required: false },
+    ],
+  },
+  assign_admin_role: {
+    label: 'Assign Admin Role',
+    params: [
+      { key: 'email',     label: 'User Email / UPN', required: true },
+      { key: 'role_name', label: 'Admin Role',        required: true },
+    ],
+  },
+  remove_admin_role: {
+    label: 'Remove Admin Role',
+    params: [
+      { key: 'email',     label: 'User Email / UPN', required: true },
+      { key: 'role_name', label: 'Admin Role',        required: true },
+    ],
+  },
+  convert_to_shared_mailbox: {
+    label: 'Convert Mailbox to Shared',
+    params: [
+      { key: 'email',          label: 'User Email / UPN',          required: true  },
+      { key: 'delegate_email', label: 'Grant Access To (optional)', required: false },
+    ],
+  },
 };
 
 module.exports.ACTION_TYPES = ACTION_TYPES;
@@ -270,6 +353,66 @@ function mockExecute(actionType, params, contactEmail = null) {
     case 'enable_account':
       push('info', `[SIMULATION] Would PATCH /users/${params.email} { accountEnabled: true }`);
       break;
+    case 'assign_license':
+      push('info', `[SIMULATION] Would GET /subscribedSkus, find "${params.license_sku}"`);
+      push('info', `[SIMULATION] Would POST /users/${params.email}/assignLicense { addLicenses: [{skuId}] }`);
+      break;
+    case 'remove_license':
+      push('info', `[SIMULATION] Would GET /users/${params.email}/licenseDetails`);
+      push('info', `[SIMULATION] Would POST /users/${params.email}/assignLicense { removeLicenses: [skuId for "${params.license_sku}"] }`);
+      break;
+    case 'update_user': {
+      const updates = ['job_title','department','office_location','mobile_phone','manager_email'].filter(k => params[k]);
+      push('info', `[SIMULATION] Would PATCH /users/${params.email} with:`);
+      updates.forEach(k => push('info', `   ${k}: ${params[k]}`));
+      if (!updates.length) push('warning', `   No profile fields provided — nothing would change.`);
+      break;
+    }
+    case 'reset_mfa':
+      push('info', `[SIMULATION] Would GET /users/${params.email}/authentication/methods`);
+      push('info', `[SIMULATION] Would DELETE each non-password auth method (authenticator app, phone, FIDO2 key)`);
+      push('info', `   User must re-register MFA on next sign-in.`);
+      break;
+    case 'invite_guest':
+      push('info', `[SIMULATION] Would POST /invitations {`);
+      push('info', `   invitedUserEmailAddress: ${params.guest_email}`);
+      push('info', `   invitedUserDisplayName: ${params.guest_name}`);
+      push('info', `   sendInvitationMessage: true`);
+      if (params.message) push('info', `   customizedMessageBody: "${params.message}"`);
+      push('info', `}`);
+      break;
+    case 'add_email_alias':
+      push('info', `[SIMULATION] Would PATCH /users/${params.email} to add proxy address: ${params.alias}`);
+      push('warning', `   Note: requires Mail.ReadWrite or Exchange.ManageAsApp permission`);
+      break;
+    case 'set_out_of_office':
+      push('info', `[SIMULATION] Would PATCH /users/${params.email}/mailboxSettings {`);
+      push('info', `   automaticRepliesSetting.status: ${params.start_date ? 'scheduled' : 'alwaysEnabled'}`);
+      if (params.start_date) push('info', `   scheduledStartDateTime: ${params.start_date}`);
+      if (params.end_date)   push('info', `   scheduledEndDateTime: ${params.end_date}`);
+      push('info', `   internalReplyMessage: "${params.message}"`);
+      push('info', `}`);
+      break;
+    case 'create_security_group':
+      push('info', `[SIMULATION] Would POST /groups {`);
+      push('info', `   displayName: "${params.group_name}", securityEnabled: true, mailEnabled: false`);
+      if (params.description) push('info', `   description: "${params.description}"`);
+      push('info', `}`);
+      break;
+    case 'assign_admin_role':
+      push('info', `[SIMULATION] Would GET /roleManagement/directory/roleDefinitions?$filter=displayName eq '${params.role_name}'`);
+      push('info', `[SIMULATION] Would POST /roleManagement/directory/roleAssignments { principalId, roleDefinitionId, directoryScopeId: "/" }`);
+      break;
+    case 'remove_admin_role':
+      push('info', `[SIMULATION] Would GET assignment for ${params.email} / ${params.role_name}`);
+      push('info', `[SIMULATION] Would DELETE /roleManagement/directory/roleAssignments/{id}`);
+      break;
+    case 'convert_to_shared_mailbox':
+      push('info', `[SIMULATION] Would disable account sign-in and convert via Exchange Online`);
+      push('info', `   PATCH /users/${params.email} { accountEnabled: false }`);
+      if (params.delegate_email) push('info', `   [Would then grant FullAccess to ${params.delegate_email}]`);
+      push('warning', `   Full mailbox type conversion requires Exchange Online PowerShell (Set-Mailbox -Type Shared)`);
+      break;
     default:
       push('warning', `Unknown action type: ${actionType}`);
   }
@@ -452,6 +595,204 @@ async function liveExecute(tenant, actionType, params, contactEmail = null) {
           accountEnabled: true,
         });
         push('success', `✅ Account enabled.`);
+        break;
+      }
+
+      case 'assign_license': {
+        push('info', `Looking up user: ${params.email}`);
+        const uRes = await graphCall(tenant, 'GET', `/users/${encodeURIComponent(params.email)}?$select=id,displayName`);
+        push('info', `Looking up license SKU: ${params.license_sku}`);
+        const skus = await graphCall(tenant, 'GET', '/subscribedSkus');
+        const sku = skus.value?.find(s =>
+          s.skuPartNumber?.toLowerCase().includes(params.license_sku.toLowerCase()) ||
+          s.skuId?.toLowerCase() === params.license_sku.toLowerCase()
+        );
+        if (!sku) throw new Error(`License SKU "${params.license_sku}" not found. Check M365 admin centre for available SKU part numbers.`);
+        await graphCall(tenant, 'POST', `/users/${uRes.id}/assignLicense`, {
+          addLicenses: [{ skuId: sku.skuId }],
+          removeLicenses: [],
+        });
+        push('success', `✅ License ${sku.skuPartNumber} assigned to ${uRes.displayName}.`);
+        break;
+      }
+
+      case 'remove_license': {
+        push('info', `Looking up user and licenses: ${params.email}`);
+        const uLic = await graphCall(tenant, 'GET', `/users/${encodeURIComponent(params.email)}?$select=id,displayName,assignedLicenses`);
+        const skusAll = await graphCall(tenant, 'GET', '/subscribedSkus');
+        const skuToRemove = skusAll.value?.find(s =>
+          s.skuPartNumber?.toLowerCase().includes(params.license_sku.toLowerCase()) ||
+          s.skuId?.toLowerCase() === params.license_sku.toLowerCase()
+        );
+        if (!skuToRemove) throw new Error(`License SKU "${params.license_sku}" not found in this tenant.`);
+        const hasLicense = uLic.assignedLicenses?.some(l => l.skuId === skuToRemove.skuId);
+        if (!hasLicense) throw new Error(`User ${params.email} does not have license ${skuToRemove.skuPartNumber} assigned.`);
+        await graphCall(tenant, 'POST', `/users/${uLic.id}/assignLicense`, {
+          addLicenses: [],
+          removeLicenses: [skuToRemove.skuId],
+        });
+        push('success', `✅ License ${skuToRemove.skuPartNumber} removed from ${uLic.displayName}.`);
+        break;
+      }
+
+      case 'update_user': {
+        push('info', `Looking up user: ${params.email}`);
+        const uUpd = await graphCall(tenant, 'GET', `/users/${encodeURIComponent(params.email)}?$select=id,displayName`);
+        const patch = {};
+        if (params.job_title)       patch.jobTitle         = params.job_title;
+        if (params.department)      patch.department       = params.department;
+        if (params.office_location) patch.officeLocation   = params.office_location;
+        if (params.mobile_phone)    patch.mobilePhone      = params.mobile_phone;
+        if (!Object.keys(patch).length && !params.manager_email) {
+          push('warning', `⚠️  No profile fields provided — nothing to update.`);
+          break;
+        }
+        if (Object.keys(patch).length) {
+          await graphCall(tenant, 'PATCH', `/users/${uUpd.id}`, patch);
+          push('success', `✅ Profile updated for ${uUpd.displayName}: ${Object.keys(patch).join(', ')}.`);
+        }
+        if (params.manager_email) {
+          const mgr = await graphCall(tenant, 'GET', `/users/${encodeURIComponent(params.manager_email)}?$select=id,displayName`);
+          await graphCall(tenant, 'PUT', `/users/${uUpd.id}/manager/$ref`, {
+            '@odata.id': `https://graph.microsoft.com/v1.0/users/${mgr.id}`,
+          });
+          push('success', `✅ Manager set to ${mgr.displayName}.`);
+        }
+        break;
+      }
+
+      case 'reset_mfa': {
+        push('info', `Fetching authentication methods for: ${params.email}`);
+        const uMfa = await graphCall(tenant, 'GET', `/users/${encodeURIComponent(params.email)}?$select=id,displayName`);
+        const methods = await graphCall(tenant, 'GET', `/users/${uMfa.id}/authentication/methods`);
+        const deletable = (methods.value || []).filter(m => !m['@odata.type']?.includes('password'));
+        if (!deletable.length) {
+          push('info', `No non-password MFA methods found for ${uMfa.displayName}.`);
+          break;
+        }
+        for (const method of deletable) {
+          const typeSlug = method['@odata.type'].split('.').pop().replace('AuthenticationMethod', '').toLowerCase();
+          const endpoint = `/users/${uMfa.id}/authentication/${typeSlug}Methods/${method.id}`;
+          try {
+            await graphCall(tenant, 'DELETE', endpoint);
+            push('success', `✅ Removed ${typeSlug} method.`);
+          } catch (e) {
+            push('warning', `⚠️  Could not remove ${typeSlug} method: ${e.message}`);
+          }
+        }
+        push('success', `✅ MFA reset complete for ${uMfa.displayName}. They must re-register on next sign-in.`);
+        break;
+      }
+
+      case 'invite_guest': {
+        push('info', `Sending B2B invitation to: ${params.guest_email}`);
+        const invite = await graphCall(tenant, 'POST', '/invitations', {
+          invitedUserEmailAddress: params.guest_email,
+          invitedUserDisplayName: params.guest_name,
+          inviteRedirectUrl: 'https://myapps.microsoft.com',
+          sendInvitationMessage: true,
+          ...(params.message ? { invitedUserMessageInfo: { customizedMessageBody: params.message } } : {}),
+        });
+        push('success', `✅ Invitation sent to ${params.guest_name} (${params.guest_email}).`);
+        push('info', `Invite status: ${invite.status}. Invited user ID: ${invite.invitedUser?.id}`);
+        break;
+      }
+
+      case 'add_email_alias': {
+        push('info', `Looking up user: ${params.email}`);
+        const uAlias = await graphCall(tenant, 'GET', `/users/${encodeURIComponent(params.email)}?$select=id,displayName,proxyAddresses`);
+        const existing = uAlias.proxyAddresses || [];
+        const newAlias = `smtp:${params.alias}`;
+        if (existing.map(a => a.toLowerCase()).includes(newAlias.toLowerCase())) {
+          push('warning', `⚠️  Alias ${params.alias} is already configured for this user.`);
+          break;
+        }
+        await graphCall(tenant, 'PATCH', `/users/${uAlias.id}`, {
+          proxyAddresses: [...existing, newAlias],
+        });
+        push('success', `✅ Email alias ${params.alias} added to ${uAlias.displayName}.`);
+        break;
+      }
+
+      case 'set_out_of_office': {
+        push('info', `Setting auto-reply for: ${params.email}`);
+        const setting = {
+          status: (params.start_date && params.end_date) ? 'scheduled' : 'alwaysEnabled',
+          internalReplyMessage: params.message,
+          externalReplyMessage: params.message,
+        };
+        if (params.start_date) setting.scheduledStartDateTime = { dateTime: `${params.start_date}T00:00:00`, timeZone: 'UTC' };
+        if (params.end_date)   setting.scheduledEndDateTime   = { dateTime: `${params.end_date}T23:59:59`,   timeZone: 'UTC' };
+        await graphCall(tenant, 'PATCH', `/users/${encodeURIComponent(params.email)}/mailboxSettings`, {
+          automaticRepliesSetting: setting,
+        });
+        push('success', `✅ Out of office / auto-reply configured.`);
+        break;
+      }
+
+      case 'create_security_group': {
+        push('info', `Creating security group: ${params.group_name}`);
+        const sg = await graphCall(tenant, 'POST', '/groups', {
+          displayName: params.group_name,
+          description: params.description || '',
+          mailEnabled: false,
+          mailNickname: params.group_name.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-'),
+          securityEnabled: true,
+          groupTypes: [],
+        });
+        push('success', `✅ Security group "${params.group_name}" created. ID: ${sg.id}`);
+        break;
+      }
+
+      case 'assign_admin_role': {
+        push('info', `Looking up role: ${params.role_name}`);
+        const roleDefs = await graphCall(tenant, 'GET',
+          `/roleManagement/directory/roleDefinitions?$filter=displayName eq '${encodeURIComponent(params.role_name)}'&$select=id,displayName`
+        );
+        const roleDef = roleDefs.value?.[0];
+        if (!roleDef) throw new Error(`Admin role "${params.role_name}" not found. Check the exact role display name.`);
+        push('info', `Looking up user: ${params.email}`);
+        const uRole = await graphCall(tenant, 'GET', `/users/${encodeURIComponent(params.email)}?$select=id,displayName`);
+        await graphCall(tenant, 'POST', '/roleManagement/directory/roleAssignments', {
+          principalId: uRole.id,
+          roleDefinitionId: roleDef.id,
+          directoryScopeId: '/',
+        });
+        push('success', `✅ Role "${roleDef.displayName}" assigned to ${uRole.displayName}.`);
+        break;
+      }
+
+      case 'remove_admin_role': {
+        push('info', `Looking up role: ${params.role_name}`);
+        const rRoleDefs = await graphCall(tenant, 'GET',
+          `/roleManagement/directory/roleDefinitions?$filter=displayName eq '${encodeURIComponent(params.role_name)}'&$select=id,displayName`
+        );
+        const rRoleDef = rRoleDefs.value?.[0];
+        if (!rRoleDef) throw new Error(`Admin role "${params.role_name}" not found.`);
+        push('info', `Looking up user: ${params.email}`);
+        const uRRole = await graphCall(tenant, 'GET', `/users/${encodeURIComponent(params.email)}?$select=id,displayName`);
+        const assignments = await graphCall(tenant, 'GET',
+          `/roleManagement/directory/roleAssignments?$filter=principalId eq '${uRRole.id}' and roleDefinitionId eq '${rRoleDef.id}'`
+        );
+        const assignment = assignments.value?.[0];
+        if (!assignment) throw new Error(`${uRRole.displayName} does not have the "${rRoleDef.displayName}" role assigned.`);
+        await graphCall(tenant, 'DELETE', `/roleManagement/directory/roleAssignments/${assignment.id}`);
+        push('success', `✅ Role "${rRoleDef.displayName}" removed from ${uRRole.displayName}.`);
+        break;
+      }
+
+      case 'convert_to_shared_mailbox': {
+        push('info', `Disabling sign-in for: ${params.email}`);
+        const uConv = await graphCall(tenant, 'GET', `/users/${encodeURIComponent(params.email)}?$select=id,displayName`);
+        await graphCall(tenant, 'PATCH', `/users/${uConv.id}`, { accountEnabled: false });
+        push('success', `✅ Sign-in disabled for ${uConv.displayName}.`);
+        push('warning', `⚠️  Full mailbox conversion to Shared requires Exchange Online PowerShell:`);
+        push('warning', `   Set-Mailbox ${params.email} -Type Shared`);
+        push('info', `   This can be run by a Global Admin or Exchange Admin in EXO PowerShell.`);
+        if (params.delegate_email) {
+          const delegate = await graphCall(tenant, 'GET', `/users/${encodeURIComponent(params.delegate_email)}?$select=id,displayName`);
+          push('info', `Delegate access requested for ${delegate.displayName} — grant via Exchange Online after conversion.`);
+        }
         break;
       }
 

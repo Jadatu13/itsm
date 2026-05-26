@@ -1,6 +1,8 @@
 const nodemailer = require('nodemailer');
 const { decrypt } = require('./lib/crypto');
 
+const APP_URL = (process.env.APP_URL || 'http://localhost:8080').replace(/\/$/, '');
+
 // ─── Config loader ────────────────────────────────────────────────────────────
 
 async function getConfig() {
@@ -93,6 +95,14 @@ function layout({ headerColour = '#4F7FFF', title, reference, body, canReply = t
 
 // ─── Templates ────────────────────────────────────────────────────────────────
 
+function portalButton(reference) {
+  const url = `${APP_URL}/portal/tickets/${encodeURIComponent(reference)}`;
+  return `
+    <div style="text-align:center;margin:24px 0 4px;">
+      <a href="${url}" style="display:inline-block;background:#4F7FFF;color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;padding:11px 28px;border-radius:7px;">View in Portal</a>
+    </div>`;
+}
+
 async function sendNewTicket({ to, firstName, reference, subject, description }) {
   const html = layout({
     headerColour: '#4F7FFF',
@@ -112,15 +122,16 @@ async function sendNewTicket({ to, firstName, reference, subject, description })
         <div style="font-size:12px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.05em;margin:14px 0 8px;">Description</div>
         <div style="font-size:14px;color:#374151;line-height:1.6;white-space:pre-wrap;">${esc(description)}</div>` : ''}
       </div>
-      <p style="margin:0;color:#6b7280;font-size:13px;">
-        You can reply directly to this email at any time to add more information to your request.
+      ${portalButton(reference)}
+      <p style="margin:8px 0 0;color:#6b7280;font-size:13px;text-align:center;">
+        Or reply directly to this email to add more information.
       </p>`,
   });
   await sendMail({
     to,
     subject: `[${reference}] Your support request has been received`,
     html,
-    text: `Hi ${firstName},\n\nWe've received your support request (${reference}).\n\nSubject: ${subject}\n\nWe'll be in touch shortly.\n\nYou can reply to this email to add more information.`,
+    text: `Hi ${firstName},\n\nWe've received your support request (${reference}).\n\nSubject: ${subject}\n\nWe'll be in touch shortly.\n\nView your request: ${APP_URL}/portal/tickets/${reference}\n\nOr reply to this email to add more information.`,
   });
 }
 
@@ -137,16 +148,20 @@ async function sendAgentReply({ to, firstName, reference, ticketSubject, replyBo
         A member of our support team has replied to your request
         <strong style="color:#374151;">${esc(ticketSubject)}</strong>.
       </p>
-      <div style="border-left:3px solid #4F7FFF;padding:12px 16px;background:#f5f8ff;border-radius:0 6px 6px 0;margin-bottom:0;">
+      <div style="border-left:3px solid #4F7FFF;padding:12px 16px;background:#f5f8ff;border-radius:0 6px 6px 0;margin-bottom:20px;">
         <div style="font-size:12px;font-weight:700;color:#4F7FFF;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">Support Agent</div>
         <div style="font-size:14px;color:#374151;line-height:1.65;">${inlineEmailStyles(replyBody)}</div>
-      </div>`,
+      </div>
+      ${portalButton(reference)}
+      <p style="margin:8px 0 0;color:#6b7280;font-size:13px;text-align:center;">
+        Or reply directly to this email to respond.
+      </p>`,
   });
   await sendMail({
     to,
     subject: `[${reference}] New reply on your support request`,
     html,
-    text: `Hi ${firstName},\n\nA support agent has replied to your request (${reference}):\n\n${stripTags(replyBody)}\n\nReply to this email to respond.`,
+    text: `Hi ${firstName},\n\nA support agent has replied to your request (${reference}):\n\n${stripTags(replyBody)}\n\nView your request: ${APP_URL}/portal/tickets/${reference}\n\nOr reply to this email to respond.`,
   });
 }
 
@@ -166,7 +181,8 @@ async function sendTicketResolved({ to, firstName, reference, ticketSubject }) {
       <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px 20px;margin-bottom:20px;">
         <span style="color:#16a34a;font-size:14px;font-weight:600;">✓ Ticket ${esc(reference)} — Resolved</span>
       </div>
-      <p style="margin:0;color:#6b7280;font-size:13px;">
+      ${portalButton(reference)}
+      <p style="margin:8px 0 0;color:#6b7280;font-size:13px;text-align:center;">
         If you need further assistance, please don't hesitate to get in touch.
       </p>`,
   });
@@ -174,7 +190,7 @@ async function sendTicketResolved({ to, firstName, reference, ticketSubject }) {
     to,
     subject: `[${reference}] Your support request has been resolved`,
     html,
-    text: `Hi ${firstName},\n\nYour support request (${reference}) has been resolved.\n\nIf you need further assistance, please don't hesitate to get in touch.`,
+    text: `Hi ${firstName},\n\nYour support request (${reference}) has been resolved.\n\nView your request: ${APP_URL}/portal/tickets/${reference}\n\nIf you need further assistance, please don't hesitate to get in touch.`,
   });
 }
 

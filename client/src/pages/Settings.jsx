@@ -25,6 +25,15 @@ export default function Settings() {
   const [testing, setTesting]   = useState(false)
   const [testMsg, setTestMsg]   = useState(null)
 
+  // ── AI Assistant state ────────────────────────────────────────────────────
+  const [ai, setAi] = useState({ ai_provider: 'grok', ai_model: '', ai_api_key: '' })
+  const [aiKeySet, setAiKeySet]       = useState(false)
+  const [aiLoading, setAiLoading]     = useState(true)
+  const [aiSaving, setAiSaving]       = useState(false)
+  const [aiMsg, setAiMsg]             = useState(null)
+  const [aiTesting, setAiTesting]     = useState(false)
+  const [aiTestMsg, setAiTestMsg]     = useState(null)
+
   // ── SLA state ─────────────────────────────────────────────────────────────
   const [sla, setSla] = useState({ sla_hours_high: 4, sla_hours_medium: 24, sla_hours_low: 72 })
   const [slaLoading, setSlaLoading]   = useState(true)
@@ -47,6 +56,56 @@ export default function Settings() {
   const [inboundMsg, setInboundMsg]         = useState(null)
   const [polling, setPolling]               = useState(false)
   const [pollMsg, setPollMsg]               = useState(null)
+
+  useEffect(() => {
+    apiFetch('/api/settings/ai')
+      .then(r => r.json())
+      .then(d => {
+        setAi({ ai_provider: d.ai_provider || 'grok', ai_model: d.ai_model || '', ai_api_key: '' })
+        setAiKeySet(d.ai_key_set || false)
+        setAiLoading(false)
+      })
+      .catch(() => setAiLoading(false))
+  }, [])
+
+  async function handleAiSave(e) {
+    e.preventDefault()
+    setAiSaving(true)
+    setAiMsg(null)
+    try {
+      const body = { ...ai, ai_api_key: ai.ai_api_key || (aiKeySet ? PASS_SENTINEL : '') }
+      const res = await apiFetch('/api/settings/ai', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      const d = await res.json()
+      if (res.ok) {
+        setAiKeySet(d.ai_key_set)
+        setAi(a => ({ ...a, ai_api_key: '' }))
+        setAiMsg({ ok: true, text: 'AI settings saved.' })
+      } else {
+        setAiMsg({ ok: false, text: d.error || 'Failed to save.' })
+      }
+    } catch {
+      setAiMsg({ ok: false, text: 'Something went wrong.' })
+    }
+    setAiSaving(false)
+  }
+
+  async function handleAiTest(e) {
+    e.preventDefault()
+    setAiTesting(true)
+    setAiTestMsg(null)
+    try {
+      const res = await apiFetch('/api/settings/ai/test', { method: 'POST' })
+      const d = await res.json()
+      setAiTestMsg({ ok: res.ok, text: d.message || d.error || 'Unknown result.' })
+    } catch {
+      setAiTestMsg({ ok: false, text: 'Request failed — is the server running?' })
+    }
+    setAiTesting(false)
+  }
 
   useEffect(() => {
     apiFetch('/api/settings/sla')
@@ -208,6 +267,7 @@ export default function Settings() {
 
   const isConfigured = !!(form.smtp_host)
   const isInboundConfigured = !!(inbound.imap_host && inbound.imap_user)
+  const isAiConfigured = aiKeySet
 
   if (loading) return (
     <div className={styles.page}>
@@ -244,6 +304,111 @@ export default function Settings() {
                 <div className={styles.linkDesc}>Manage reply templates</div>
               </div>
             </a>
+          </div>
+        </section>
+
+        {/* ── AI Assistant ─────────────────────────────── */}
+        <section className={styles.section}>
+          <div className={styles.sectionHead}>
+            <div>
+              <h2 className={styles.sectionTitle}>AI Assistant</h2>
+              <p className={styles.sectionDesc}>
+                Configure an AI provider to help agents draft ticket replies. Supports Grok (xAI) and Claude (Anthropic).
+                API keys are encrypted before being stored.
+              </p>
+            </div>
+            <span className={isAiConfigured ? styles.badgeOn : styles.badgeOff}>
+              {isAiConfigured ? '● Configured' : '○ Not configured'}
+            </span>
+          </div>
+
+          {aiLoading ? (
+            <div className={styles.card}><p className={styles.msgWarn}>Loading…</p></div>
+          ) : (
+            <form className={styles.card} onSubmit={handleAiSave}>
+              <div className={styles.grid2}>
+                <div className={formStyles.field}>
+                  <label className={formStyles.label}>Provider</label>
+                  <select
+                    className={formStyles.select}
+                    value={ai.ai_provider}
+                    onChange={e => setAi(a => ({ ...a, ai_provider: e.target.value }))}
+                  >
+                    <option value="grok">Grok (xAI)</option>
+                    <option value="claude">Claude (Anthropic)</option>
+                  </select>
+                </div>
+                <div className={formStyles.field}>
+                  <label className={formStyles.label}>
+                    Model <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(optional — leave blank for default)</span>
+                  </label>
+                  <input
+                    className={formStyles.input}
+                    placeholder={ai.ai_provider === 'claude' ? 'claude-haiku-4-5' : 'grok-3'}
+                    value={ai.ai_model}
+                    onChange={e => setAi(a => ({ ...a, ai_model: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              <div className={formStyles.field}>
+                <label className={formStyles.label}>
+                  API Key
+                  {aiKeySet && <span className={styles.passHint}> — saved (leave blank to keep)</span>}
+                </label>
+                <input
+                  className={formStyles.input}
+                  type="password"
+                  placeholder={aiKeySet ? '••••••••••••••••' : ai.ai_provider === 'claude' ? 'sk-ant-...' : 'xai-...'}
+                  value={ai.ai_api_key}
+                  onChange={e => setAi(a => ({ ...a, ai_api_key: e.target.value }))}
+                  autoComplete="new-password"
+                />
+              </div>
+
+              <div className={styles.formFooter}>
+                {aiMsg && (
+                  <span className={aiMsg.ok ? styles.msgOk : styles.msgErr}>
+                    {aiMsg.ok ? '✓ ' : '✕ '}{aiMsg.text}
+                  </span>
+                )}
+                <button type="submit" className={formStyles.btnPrimary} disabled={aiSaving}>
+                  {aiSaving ? 'Saving…' : 'Save AI Settings'}
+                </button>
+              </div>
+            </form>
+          )}
+        </section>
+
+        {/* ── Test AI ──────────────────────────────────── */}
+        <section className={styles.section}>
+          <div className={styles.sectionHead}>
+            <div>
+              <h2 className={styles.sectionTitle}>Test AI Connection</h2>
+              <p className={styles.sectionDesc}>
+                Verify your API key works by sending a quick test request to the provider.
+              </p>
+            </div>
+          </div>
+          <div className={styles.card}>
+            <div className={styles.testRow}>
+              <button
+                type="button"
+                className={formStyles.btnPrimary}
+                onClick={handleAiTest}
+                disabled={aiTesting || !isAiConfigured}
+              >
+                {aiTesting ? 'Testing…' : 'Test Connection'}
+              </button>
+            </div>
+            {!isAiConfigured && (
+              <p className={styles.msgWarn}>Save your API key above before testing.</p>
+            )}
+            {aiTestMsg && (
+              <p className={aiTestMsg.ok ? styles.msgOk : styles.msgErr}>
+                {aiTestMsg.ok ? '✓ ' : '✕ '}{aiTestMsg.text}
+              </p>
+            )}
           </div>
         </section>
 

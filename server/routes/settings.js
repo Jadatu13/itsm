@@ -232,6 +232,93 @@ router.post('/inbound/test', async (req, res) => {
   }
 });
 
+// ─── GET /api/settings/ai ─────────────────────────────────────────────────────
+
+router.get('/ai', async (req, res) => {
+  try {
+    const result = await db.query(`SELECT key, value FROM settings WHERE key LIKE 'ai_%'`);
+    const s = Object.fromEntries(result.rows.map(r => [r.key, r.value]));
+    res.json({
+      ai_provider: s.ai_provider || 'grok',
+      ai_model:    s.ai_model    || '',
+      ai_key_set:  !!s.ai_api_key,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to load AI settings' });
+  }
+});
+
+// ─── PUT /api/settings/ai ─────────────────────────────────────────────────────
+
+router.put('/ai', async (req, res) => {
+  const { ai_provider, ai_model, ai_api_key } = req.body;
+  try {
+    const updates = {
+      ai_provider: ai_provider || 'grok',
+      ai_model:    ai_model    || null,
+    };
+    if (ai_api_key && ai_api_key !== PASS_SENTINEL) {
+      updates.ai_api_key = encrypt(ai_api_key);
+    }
+    for (const [key, value] of Object.entries(updates)) {
+      if (value === null) {
+        await db.query(`DELETE FROM settings WHERE key = $1`, [key]);
+      } else {
+        await db.query(
+          `INSERT INTO settings (key, value) VALUES ($1, $2)
+           ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+          [key, value]
+        );
+      }
+    }
+    const result = await db.query(`SELECT key, value FROM settings WHERE key LIKE 'ai_%'`);
+    const s = Object.fromEntries(result.rows.map(r => [r.key, r.value]));
+    res.json({ ai_provider: s.ai_provider || 'grok', ai_model: s.ai_model || '', ai_key_set: !!s.ai_api_key });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to save AI settings' });
+  }
+});
+
+// ─── POST /api/settings/ai/test ───────────────────────────────────────────────
+
+router.post('/ai/test', async (req, res) => {
+  try {
+    const result = await db.query(`SELECT key, value FROM settings WHERE key LIKE 'ai_%'`);
+    const s = Object.fromEntries(result.rows.map(r => [r.key, r.value]));
+    if (!s.ai_api_key) return res.status(400).json({ error: 'No API key configured. Save your settings first.' });
+
+    const provider = s.ai_provider || 'grok';
+    const apiKey   = decrypt(s.ai_api_key);
+    const model    = s.ai_model || (provider === 'claude' ? 'claude-haiku-4-5' : 'grok-3');
+
+    let ok = false;
+    if (provider === 'grok') {
+      const r = await fetch('https://api.x.ai/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+        body: JSON.stringify({ model, messages: [{ role: 'user', content: 'Say "ok" and nothing else.' }], max_tokens: 5 }),
+      });
+      ok = r.ok;
+      if (!ok) { const t = await r.text(); return res.status(400).json({ error: `Grok API error: ${t}` }); }
+    } else if (provider === 'claude') {
+      const r = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+        body: JSON.stringify({ model, max_tokens: 5, messages: [{ role: 'user', content: 'Say "ok" and nothing else.' }] }),
+      });
+      ok = r.ok;
+      if (!ok) { const t = await r.text(); return res.status(400).json({ error: `Claude API error: ${t}` }); }
+    }
+
+    res.json({ ok: true, message: `${provider === 'claude' ? 'Claude' : 'Grok'} API key is working correctly.` });
+  } catch (err) {
+    console.error('[ai test]', err.message);
+    res.status(400).json({ error: err.message });
+  }
+});
+
 // ─── GET /api/settings/sla ────────────────────────────────────────────────────
 
 router.get('/sla', async (req, res) => {

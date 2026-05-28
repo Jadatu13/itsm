@@ -31,6 +31,8 @@ export default function TicketDetail() {
   const [kbList, setKbList] = useState([])
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [showMerge, setShowMerge] = useState(false)
+  const [draftingAi, setDraftingAi] = useState(false)
+  const [aiError, setAiError]       = useState(null)
 
   const isFirstLoad  = useRef(true)
   const repliesEndRef = useRef(null)
@@ -115,6 +117,27 @@ export default function TicketDetail() {
     setSending(false)
   }
 
+  async function draftWithAi() {
+    setDraftingAi(true)
+    setAiError(null)
+    try {
+      const res = await apiFetch('/api/ai/draft-reply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ticket_id: id }),
+      })
+      const d = await res.json()
+      if (!res.ok) {
+        setAiError(d.error || 'AI draft failed.')
+      } else {
+        editorRef.current?.insertHTMLContent(d.html)
+      }
+    } catch {
+      setAiError('Failed to reach the server.')
+    }
+    setDraftingAi(false)
+  }
+
   async function openCanned() {
     if (!cannedList.length) {
       const d = await apiFetch('/api/canned-responses').then(r => r.json())
@@ -192,6 +215,12 @@ export default function TicketDetail() {
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
                   KB Article
                 </button>
+                <button type="button" className={styles.aiBtn} onClick={draftWithAi} disabled={draftingAi} title="Draft a reply using AI">
+                  {draftingAi
+                    ? <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg> Drafting…</>
+                    : <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg> Draft with AI</>
+                  }
+                </button>
               </div>
 
               <RichTextEditor
@@ -202,6 +231,7 @@ export default function TicketDetail() {
                 ref={editorRef}
               />
               {replyError && <div className={styles.replyError}>{replyError}</div>}
+              {aiError && <div className={styles.replyError}>✕ {aiError}</div>}
               <div className={styles.replyActions}>
                 {!isInternal && (
                   <button type="button" className={styles.sendCloseBtn} disabled={sending || !replyBody.trim()}

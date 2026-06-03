@@ -1334,21 +1334,23 @@ function FormBuilderModal({ form, onClose, onSave }) {
                   ))}
                 </select>
               </div>
-              {tenants.length > 0 && (
-                <div className={styles.formGroup}>
-                  <label className={styles.formLabel}>Execute on Tenant</label>
-                  <select
-                    className={styles.formSelect}
-                    value={automationTenantId}
-                    onChange={e => setAutomationTenantId(e.target.value)}
-                  >
-                    <option value="">First connected tenant</option>
-                    {tenants.map(t => (
-                      <option key={t.id} value={t.id}>{t.display_name}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
+              <div className={styles.formGroup}>
+                <label className={styles.formLabel}>Execute on Tenant</label>
+                <select
+                  className={styles.formSelect}
+                  value={automationTenantId}
+                  onChange={e => setAutomationTenantId(e.target.value)}
+                >
+                  <option value="">Submitter's organisation (recommended)</option>
+                  {tenants.map(t => (
+                    <option key={t.id} value={t.id}>{t.display_name}</option>
+                  ))}
+                </select>
+                <p className={styles.hintText}>
+                  "Submitter's organisation" resolves the tenant linked to the contact who submitted the request.
+                  If their organisation has no linked tenant, the request is logged as a ticket only.
+                </p>
+              </div>
             </div>
 
             {/* Parameter mapping — only when action selected */}

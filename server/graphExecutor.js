@@ -385,10 +385,11 @@ function mockExecute(actionType, params, contactEmail = null) {
       push('info', `[SIMULATION] Would DELETE mailbox permission on ${params.mailbox_email} for ${params.user_email}`);
       break;
     case 'create_shared_mailbox':
-      push('info', `[SIMULATION] Would POST Exchange Online /Mailbox (shared):`);
-      push('info', `   DisplayName: ${params.display_name}`);
+      push('info', `[SIMULATION] Would POST Exchange Online /InvokeCommand:`);
+      push('info', `   CmdletName: New-Mailbox`);
+      push('info', `   Name: ${params.display_name}`);
       push('info', `   PrimarySmtpAddress: ${params.email}`);
-      push('info', `   SharedMailbox: true`);
+      push('info', `   Shared: true`);
       break;
     case 'add_to_group':
       push('info', `[SIMULATION] Would find group "${params.group_name}", then POST /groups/{id}/members/$ref`);
@@ -579,12 +580,18 @@ async function liveExecute(tenant, actionType, params, contactEmail = null) {
 
       case 'create_shared_mailbox': {
         push('info', `Creating shared mailbox: ${params.email}`);
-        const mb = await exchangeCall(tenant, 'POST', '/Mailbox', {
-          DisplayName:         params.display_name,
-          PrimarySmtpAddress:  params.email,
-          SharedMailbox:       true,
+        const mb = await exchangeCall(tenant, 'POST', '/InvokeCommand', {
+          CmdletInput: {
+            CmdletName: 'New-Mailbox',
+            Parameters: {
+              Name:               params.display_name,
+              Shared:             true,
+              PrimarySmtpAddress: params.email,
+            },
+          },
         });
-        const mbId = mb.ExternalDirectoryObjectId || mb.Identity || mb.Guid || '(created)';
+        const result = mb?.value?.[0] || mb;
+        const mbId = result?.ExternalDirectoryObjectId || result?.Identity?.Name || result?.Guid || '(created)';
         push('success', `✅ Shared mailbox created. Identity: ${mbId}`);
         break;
       }

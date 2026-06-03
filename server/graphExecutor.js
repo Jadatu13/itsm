@@ -871,16 +871,16 @@ async function liveExecute(tenant, actionType, params, contactEmail = null) {
  * @returns {{ success, mock, log, error? }}
  */
 async function executeAutomation(serviceRequest, form) {
-  const automationAction = form.automation_action;
-  if (!automationAction?.type || automationAction.type === 'none') {
-    return { success: true, mock: true, log: [{ level: 'info', message: 'No automation action configured.', time: new Date().toISOString() }] };
+  // Normalise: old single-action object → array; filter out 'none' placeholders
+  const raw = form.automation_action;
+  const actions = (Array.isArray(raw) ? raw : raw ? [raw] : [])
+    .filter(a => a?.type && a.type !== 'none');
+
+  if (actions.length === 0) {
+    return { success: true, mock: true, log: [{ level: 'info', message: 'No automation actions configured.', time: new Date().toISOString() }] };
   }
 
-  // Resolve field values → action params
-  const params = resolveParams(automationAction, serviceRequest.field_values || {}, form.fields || []);
-
-  // Resolve tenant strictly by the contact's organisation — no fallbacks.
-  // If the org has no linked M365 tenant, the form produces a ticket only.
+  // Resolve tenant from the contact's linked organisation — no fallback.
   let tenant = null;
   let contactEmail = null;
   let orgName = null;
@@ -920,7 +920,38 @@ async function executeAutomation(serviceRequest, form) {
     };
   }
 
-  return liveExecute(tenant, automationAction.type, params, contactEmail);
+  // Execute each action sequentially; accumulate logs across all steps.
+  const combinedLog = [];
+  let anyFailed = false;
+  const ts = () => new Date().toISOString();
+
+  for (let i = 0; i < actions.length; i++) {
+    const action = actions[i];
+    const stepLabel = `Step ${i + 1}/${actions.length}: ${ACTION_TYPES[action.type]?.label || action.type}`;
+    combinedLog.push({ time: ts(), level: 'info', message: `─── ${stepLabel} ───` });
+
+    const params = resolveParams(action, serviceRequest.field_values || {}, form.fields || []);
+
+    try {
+      const result = await liveExecute(tenant, action.type, params, contactEmail);
+      combinedLog.push(...(result.log || []));
+      if (!result.success) anyFailed = true;
+    } catch (err) {
+      combinedLog.push({ time: ts(), level: 'error', message: `✕ ${stepLabel} failed: ${err.message}` });
+      anyFailed = true;
+      // Continue with remaining steps even if one fails
+    }
+  }
+
+  combinedLog.push({
+    time: ts(),
+    level: anyFailed ? 'warning' : 'success',
+    message: anyFailed
+      ? `⚠️  Completed with errors — ${actions.length} action(s) attempted.`
+      : `✅ All ${actions.length} action(s) completed successfully.`,
+  });
+
+  return { success: !anyFailed, log: combinedLog };
 }
 
 module.exports = { executeAutomation, ACTION_TYPES, checkUPNExists };

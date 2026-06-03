@@ -695,10 +695,8 @@
 
 .paramMapping {
   background: #F8F9FB;
-  border: 1px solid #E5E7EB;
-  border-radius: 8px;
+  border-top: 1px solid #E5E7EB;
   padding: 14px 16px;
-  margin-top: 12px;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -783,6 +781,84 @@
   margin-top: 4px;
 }
 .noTenantNote a { color: #4F46E5; font-weight: 600; }
+
+/* ── Multi-action list ───────────────────────────────────────────────────── */
+.actionList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.actionCard {
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--white, #fff);
+}
+
+.actionCardHeader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: #f9fafb;
+  border-bottom: 1px solid var(--border, #e5e7eb);
+}
+
+.actionStep {
+  font-size: 11px;
+  font-weight: 700;
+  color: #6366f1;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+  background: #eef2ff;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.actionTypeSelect {
+  flex: 1;
+  padding: 6px 10px;
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 6px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--text-primary, #111827);
+  background: #fff;
+}
+
+.removeActionBtn {
+  font-size: 12px;
+  font-weight: 600;
+  color: #dc2626;
+  background: none;
+  border: 1px solid #fca5a5;
+  border-radius: 5px;
+  padding: 4px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+.removeActionBtn:hover { background: #fee2e2; }
+
+.addActionBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: 1px dashed #6366f1;
+  border-radius: 7px;
+  background: none;
+  color: #6366f1;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  align-self: flex-start;
+}
+.addActionBtn:hover { background: #eef2ff; }
 
 .automationBadge {
   font-size: 11px;

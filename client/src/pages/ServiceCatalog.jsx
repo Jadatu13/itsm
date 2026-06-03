@@ -884,9 +884,15 @@ function FormBuilderModal({ form, onClose, onSave }) {
   const [ticketCategory, setTicketCategory] = useState(form?.ticket_category || '')
   const [subjectTemplate, setSubjectTemplate] = useState(form?.ticket_subject_template || '')
   const [requiresApproval, setRequiresApproval] = useState(form?.requires_approval || false)
-  const [automationAction, setAutomationAction] = useState(
-    form?.automation_action || { type: 'none', field_map: {}, fixed_values: {} }
-  )
+
+  // Normalise stored value → always an array of action objects
+  const initActions = () => {
+    const raw = form?.automation_action
+    if (!raw) return [{ type: 'none', field_map: {}, fixed_values: {} }]
+    if (Array.isArray(raw)) return raw.length ? raw : [{ type: 'none', field_map: {}, fixed_values: {} }]
+    return [raw] // legacy single-object format
+  }
+  const [automationActions, setAutomationActions] = useState(initActions)
   const [tenants, setTenants] = useState([])
   const [automationTenantId, setAutomationTenantId] = useState(form?.automation_tenant_id || '')
   const [saving, setSaving] = useState(false)
@@ -1022,7 +1028,10 @@ function FormBuilderModal({ form, onClose, onSave }) {
         enabled: form?.enabled !== false,
         sort_order: form?.sort_order || 0,
         requires_approval: requiresApproval,
-        automation_action: automationAction.type !== 'none' ? automationAction : null,
+        automation_action: (() => {
+          const real = automationActions.filter(a => a.type && a.type !== 'none')
+          return real.length ? real : null
+        })(),
         automation_tenant_id: automationTenantId || null,
       })
       const url = form?.id ? `/api/service-catalog/${form.id}` : '/api/service-catalog'
@@ -1320,20 +1329,8 @@ function FormBuilderModal({ form, onClose, onSave }) {
               </label>
             </div>
 
-            {/* Action type select */}
-            <div className={styles.canvasRow}>
-              <div className={styles.formGroup}>
-                <label className={styles.formLabel}>Automation Action</label>
-                <select
-                  className={styles.formSelect}
-                  value={automationAction.type}
-                  onChange={e => setAutomationAction({ type: e.target.value, field_map: {}, fixed_values: {} })}
-                >
-                  {Object.entries(ACTION_TYPES).map(([key, def]) => (
-                    <option key={key} value={key}>{def.label}</option>
-                  ))}
-                </select>
-              </div>
+            {/* Tenant selection */}
+            <div className={styles.canvasFullRow}>
               <div className={styles.formGroup}>
                 <label className={styles.formLabel}>Execute on Tenant</label>
                 <select
@@ -1347,69 +1344,103 @@ function FormBuilderModal({ form, onClose, onSave }) {
                   ))}
                 </select>
                 <p className={styles.hintText}>
-                  "Submitter's organisation" resolves the tenant linked to the contact who submitted the request.
-                  If their organisation has no linked tenant, the request is logged as a ticket only.
+                  Resolves the M365 tenant linked to the contact's organisation. If none is linked, a ticket is created only.
                 </p>
               </div>
             </div>
 
-            {/* Parameter mapping — only when action selected */}
-            {automationAction.type && automationAction.type !== 'none' && (
-              <div className={styles.paramMapping}>
-                <p className={styles.paramMappingTitle}>
-                  Map form fields → action parameters
-                </p>
-                <p className={styles.paramMappingHint}>
-                  For each parameter, choose a form field to use as the value, or enter a fixed value.
-                </p>
-                {ACTION_TYPES[automationAction.type]?.params.map(param => {
-                  const mappedFieldId = automationAction.field_map?.[param.key] || ''
-                  const fixedVal = automationAction.fixed_values?.[param.key] || ''
-                  return (
-                    <div key={param.key} className={styles.paramRow}>
-                      <div className={styles.paramLabel}>
-                        {param.label}
-                        {param.required && <span className={styles.paramRequired}> *</span>}
-                      </div>
-                      <div className={styles.paramControls}>
-                        <select
-                          className={styles.paramSelect}
-                          value={mappedFieldId}
-                          onChange={e => setAutomationAction(prev => ({
-                            ...prev,
-                            field_map: { ...prev.field_map, [param.key]: e.target.value },
-                          }))}
-                        >
-                          <option value="">— fixed value —</option>
-                          {fields.map(f => (
-                            <option key={f.id} value={f.id}>{f.label}</option>
-                          ))}
-                        </select>
-                        {!mappedFieldId && (
-                          <input
-                            className={styles.paramFixed}
-                            value={fixedVal}
-                            onChange={e => setAutomationAction(prev => ({
-                              ...prev,
-                              fixed_values: { ...prev.fixed_values, [param.key]: e.target.value },
-                            }))}
-                            placeholder={`Fixed: ${param.label}`}
-                          />
-                        )}
-                      </div>
-                    </div>
-                  )
-                })}
-                {tenants.length === 0 && (
-                  <div className={styles.noTenantNote}>
-                    🔌 No M365 tenant connected — actions will run in simulation mode.
-                    <a href="/m365-tenants" target="_blank" rel="noopener noreferrer" style={{ marginLeft: 6 }}>
-                      Connect a tenant →
-                    </a>
+            {/* Multi-action list */}
+            <div className={styles.actionList}>
+              {automationActions.map((action, idx) => (
+                <div key={idx} className={styles.actionCard}>
+                  <div className={styles.actionCardHeader}>
+                    <span className={styles.actionStep}>Step {idx + 1}</span>
+                    <select
+                      className={styles.actionTypeSelect}
+                      value={action.type}
+                      onChange={e => setAutomationActions(prev => prev.map((a, i) =>
+                        i === idx ? { type: e.target.value, field_map: {}, fixed_values: {} } : a
+                      ))}
+                    >
+                      {Object.entries(ACTION_TYPES).map(([key, def]) => (
+                        <option key={key} value={key}>{def.label}</option>
+                      ))}
+                    </select>
+                    {automationActions.length > 1 && (
+                      <button
+                        type="button"
+                        className={styles.removeActionBtn}
+                        onClick={() => setAutomationActions(prev => prev.filter((_, i) => i !== idx))}
+                        title="Remove this action"
+                      >
+                        ✕ Remove
+                      </button>
+                    )}
                   </div>
-                )}
-              </div>
-            )}
+
+                  {action.type && action.type !== 'none' && (
+                    <div className={styles.paramMapping}>
+                      <p className={styles.paramMappingHint}>
+                        For each parameter, choose a form field or enter a fixed value.
+                      </p>
+                      {ACTION_TYPES[action.type]?.params.map(param => {
+                        const mappedFieldId = action.field_map?.[param.key] || ''
+                        const fixedVal = action.fixed_values?.[param.key] || ''
+                        return (
+                          <div key={param.key} className={styles.paramRow}>
+                            <div className={styles.paramLabel}>
+                              {param.label}
+                              {param.required && <span className={styles.paramRequired}> *</span>}
+                            </div>
+                            <div className={styles.paramControls}>
+                              <select
+                                className={styles.paramSelect}
+                                value={mappedFieldId}
+                                onChange={e => setAutomationActions(prev => prev.map((a, i) =>
+                                  i === idx ? { ...a, field_map: { ...a.field_map, [param.key]: e.target.value } } : a
+                                ))}
+                              >
+                                <option value="">— fixed value —</option>
+                                {fields.map(f => (
+                                  <option key={f.id} value={f.id}>{f.label}</option>
+                                ))}
+                              </select>
+                              {!mappedFieldId && (
+                                <input
+                                  className={styles.paramFixed}
+                                  value={fixedVal}
+                                  onChange={e => setAutomationActions(prev => prev.map((a, i) =>
+                                    i === idx ? { ...a, fixed_values: { ...a.fixed_values, [param.key]: e.target.value } } : a
+                                  ))}
+                                  placeholder={`Fixed: ${param.label}`}
+                                />
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              <button
+                type="button"
+                className={styles.addActionBtn}
+                onClick={() => setAutomationActions(prev => [...prev, { type: 'none', field_map: {}, fixed_values: {} }])}
+              >
+                + Add Action
+              </button>
+
+              {tenants.length === 0 && (
+                <div className={styles.noTenantNote}>
+                  🔌 No M365 tenant connected — actions will run in simulation mode.
+                  <a href="/m365-tenants" target="_blank" rel="noopener noreferrer" style={{ marginLeft: 6 }}>
+                    Connect a tenant →
+                  </a>
+                </div>
+              )}
+            </div>
 
             {error && <div style={{ color: '#DC2626', fontSize: '0.875rem', marginTop: 8 }}>{error}</div>}
           </div>

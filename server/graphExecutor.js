@@ -237,6 +237,57 @@ async function getFreshToken(tenant) {
   return data.access_token;
 }
 
+// ── Exchange Online token (Exchange.ManageAsApp scope) ────────────────────────
+async function getExchangeToken(tenant) {
+  const url = `https://login.microsoftonline.com/${tenant.tenant_id}/oauth2/v2.0/token`;
+  const body = new URLSearchParams({
+    grant_type:    'client_credentials',
+    client_id:     tenant.client_id,
+    client_secret: tenant.client_secret,
+    scope:         'https://outlook.office365.com/.default',
+  });
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: body.toString(),
+  });
+  if (!res.ok) {
+    const raw = await res.text();
+    let msg = raw;
+    try { msg = JSON.parse(raw)?.error_description || JSON.parse(raw)?.error || raw; } catch {}
+    throw new Error(`Exchange token request failed: ${msg}`);
+  }
+  const data = await res.json();
+  return data.access_token;
+}
+
+// ── Exchange Online REST API call helper ──────────────────────────────────────
+async function exchangeCall(tenant, method, path, body = null) {
+  const token = await getExchangeToken(tenant);
+  const opts = {
+    method,
+    headers: {
+      Authorization:  `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+  };
+  if (body) opts.body = JSON.stringify(body);
+
+  const url = `https://outlook.office365.com/adminapi/beta/${tenant.tenant_id}${path}`;
+  const res  = await fetch(url, opts);
+  const text = await res.text();
+  let data;
+  try { data = JSON.parse(text); } catch { data = { raw: text }; }
+
+  if (!res.ok) {
+    console.error(`[exchange] ${method} ${path} → ${res.status}`, JSON.stringify(data?.error || text));
+    const msg  = data?.error?.message  || data?.Message  || text;
+    const code = data?.error?.code     || data?.ErrorCode || '';
+    throw new Error(`Exchange API error (${res.status})${code ? ` [${code}]` : ''}: ${msg}`);
+  }
+  return data;
+}
+
 // ── Graph API call helper ─────────────────────────────────────────────────────
 async function graphCall(tenant, method, path, body = null) {
   const token = await getFreshToken(tenant);
@@ -334,10 +385,10 @@ function mockExecute(actionType, params, contactEmail = null) {
       push('info', `[SIMULATION] Would DELETE mailbox permission on ${params.mailbox_email} for ${params.user_email}`);
       break;
     case 'create_shared_mailbox':
-      push('info', `[SIMULATION] Would POST /users with mailbox enabled:`);
-      push('info', `   displayName: ${params.display_name}`);
-      push('info', `   userPrincipalName: ${params.email}`);
-      push('info', `   [Would convert to shared mailbox via EXO]`);
+      push('info', `[SIMULATION] Would POST Exchange Online /Mailbox (shared):`);
+      push('info', `   DisplayName: ${params.display_name}`);
+      push('info', `   PrimarySmtpAddress: ${params.email}`);
+      push('info', `   SharedMailbox: true`);
       break;
     case 'add_to_group':
       push('info', `[SIMULATION] Would find group "${params.group_name}", then POST /groups/{id}/members/$ref`);
@@ -528,16 +579,13 @@ async function liveExecute(tenant, actionType, params, contactEmail = null) {
 
       case 'create_shared_mailbox': {
         push('info', `Creating shared mailbox: ${params.email}`);
-        const mb = await graphCall(tenant, 'POST', '/users', {
-          accountEnabled: false,
-          displayName: params.display_name,
-          mailEnabled: true,
-          mailNickname: params.email.split('@')[0],
-          userPrincipalName: params.email,
-          passwordProfile: { password: `Shared${Math.random().toString(36).slice(2, 10)}!`, forceChangePasswordNextSignIn: false },
+        const mb = await exchangeCall(tenant, 'POST', '/Mailbox', {
+          DisplayName:         params.display_name,
+          PrimarySmtpAddress:  params.email,
+          SharedMailbox:       true,
         });
-        push('success', `✅ Mailbox user created. ID: ${mb.id}`);
-        push('info', `Note: Convert to shared mailbox in Exchange Online admin to complete.`);
+        const mbId = mb.ExternalDirectoryObjectId || mb.Identity || mb.Guid || '(created)';
+        push('success', `✅ Shared mailbox created. Identity: ${mbId}`);
         break;
       }
 

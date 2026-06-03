@@ -1406,14 +1406,30 @@ function FormBuilderModal({ form, onClose, onSave }) {
                                 ))}
                               </select>
                               {!mappedFieldId && (
-                                <input
-                                  className={styles.paramFixed}
-                                  value={fixedVal}
-                                  onChange={e => setAutomationActions(prev => prev.map((a, i) =>
-                                    i === idx ? { ...a, fixed_values: { ...a.fixed_values, [param.key]: e.target.value } } : a
-                                  ))}
-                                  placeholder={`Fixed: ${param.label}`}
-                                />
+                                param.options ? (
+                                  // Param has predefined options — render a dropdown
+                                  <select
+                                    className={styles.paramFixed}
+                                    value={fixedVal}
+                                    onChange={e => setAutomationActions(prev => prev.map((a, i) =>
+                                      i === idx ? { ...a, fixed_values: { ...a.fixed_values, [param.key]: e.target.value } } : a
+                                    ))}
+                                  >
+                                    <option value="">— select —</option>
+                                    {param.options.map(o => (
+                                      <option key={o.value} value={o.value}>{o.label}</option>
+                                    ))}
+                                  </select>
+                                ) : (
+                                  <input
+                                    className={styles.paramFixed}
+                                    value={fixedVal}
+                                    onChange={e => setAutomationActions(prev => prev.map((a, i) =>
+                                      i === idx ? { ...a, fixed_values: { ...a.fixed_values, [param.key]: e.target.value } } : a
+                                    ))}
+                                    placeholder={`Fixed: ${param.label}`}
+                                  />
+                                )
                               )}
                             </div>
                           </div>

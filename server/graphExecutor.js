@@ -32,17 +32,31 @@ const ACTION_TYPES = {
   add_mailbox_permission: {
     label: 'Add Mailbox Permission',
     params: [
-      { key: 'mailbox_email',   label: 'Mailbox Email',              required: true  },
-      { key: 'user_email',      label: 'Grant Access To (email)',     required: true  },
-      { key: 'permission_type', label: 'Permission (FullAccess / SendAs / SendOnBehalf)', required: true },
+      { key: 'mailbox_email',   label: 'Mailbox Email',          required: true },
+      { key: 'user_email',      label: 'Grant Access To (email)', required: true },
+      {
+        key: 'permission_type', label: 'Permission Level', required: true,
+        options: [
+          { value: 'FullAccess',    label: 'Read & Manage (Full Access)' },
+          { value: 'SendAs',        label: 'Send As' },
+          { value: 'SendOnBehalf',  label: 'Send on Behalf' },
+        ],
+      },
     ],
   },
   remove_mailbox_permission: {
     label: 'Remove Mailbox Permission',
     params: [
-      { key: 'mailbox_email',   label: 'Mailbox Email',              required: true  },
-      { key: 'user_email',      label: 'Remove Access From (email)', required: true  },
-      { key: 'permission_type', label: 'Permission Type',            required: true  },
+      { key: 'mailbox_email',   label: 'Mailbox Email',              required: true },
+      { key: 'user_email',      label: 'Remove Access From (email)', required: true },
+      {
+        key: 'permission_type', label: 'Permission Level', required: true,
+        options: [
+          { value: 'FullAccess',    label: 'Read & Manage (Full Access)' },
+          { value: 'SendAs',        label: 'Send As' },
+          { value: 'SendOnBehalf',  label: 'Send on Behalf' },
+        ],
+      },
     ],
   },
   create_shared_mailbox: {
@@ -377,13 +391,27 @@ function mockExecute(actionType, params, contactEmail = null) {
       push('info', `[SIMULATION] Would PATCH /users/${params.email} with new temporary password`);
       push('info', `   forceChangePasswordNextSignIn: true`);
       break;
-    case 'add_mailbox_permission':
-      push('info', `[SIMULATION] Would POST /users/${params.mailbox_email}/mailFolders/inbox/messageRules`);
-      push('info', `   Granting ${params.permission_type} to ${params.user_email} on ${params.mailbox_email}`);
+    case 'add_mailbox_permission': {
+      const addCmdlet = params.permission_type === 'SendAs'       ? 'Add-RecipientPermission'
+                      : params.permission_type === 'SendOnBehalf' ? 'Set-Mailbox (GrantSendOnBehalfTo)'
+                      : 'Add-MailboxPermission';
+      push('info', `[SIMULATION] Would POST Exchange Online /InvokeCommand:`);
+      push('info', `   CmdletName: ${addCmdlet}`);
+      push('info', `   Identity: ${params.mailbox_email}`);
+      push('info', `   User/Trustee: ${params.user_email}`);
+      push('info', `   AccessRights: ${params.permission_type}`);
       break;
-    case 'remove_mailbox_permission':
-      push('info', `[SIMULATION] Would DELETE mailbox permission on ${params.mailbox_email} for ${params.user_email}`);
+    }
+    case 'remove_mailbox_permission': {
+      const remCmdlet = params.permission_type === 'SendAs'       ? 'Remove-RecipientPermission'
+                      : params.permission_type === 'SendOnBehalf' ? 'Set-Mailbox (GrantSendOnBehalfTo remove)'
+                      : 'Remove-MailboxPermission';
+      push('info', `[SIMULATION] Would POST Exchange Online /InvokeCommand:`);
+      push('info', `   CmdletName: ${remCmdlet}`);
+      push('info', `   Identity: ${params.mailbox_email}`);
+      push('info', `   User/Trustee: ${params.user_email}`);
       break;
+    }
     case 'create_shared_mailbox':
       push('info', `[SIMULATION] Would POST Exchange Online /InvokeCommand:`);
       push('info', `   CmdletName: New-Mailbox`);
@@ -562,19 +590,99 @@ async function liveExecute(tenant, actionType, params, contactEmail = null) {
       }
 
       case 'add_mailbox_permission': {
-        // Graph API doesn't directly handle mailbox ACLs for shared mailboxes — uses EWS/EXO
-        // But we can handle via Outlook permissions endpoint for supported scenarios
-        push('info', `Granting ${params.permission_type} on ${params.mailbox_email} to ${params.user_email}`);
-        push('warning', `ℹ️  Mailbox ACLs require Exchange Online permissions (FullAccess/SendAs).`);
-        push('warning', `   Executed via MS Graph /users/{id}/mailFolders/{id}/permissions`);
-        // For FullAccess: use EWS or EXO PowerShell — Graph only covers calendar/mail folder perms
-        push('success', `✅ Permission grant request submitted to Exchange Online.`);
+        push('info', `Granting ${params.permission_type} on mailbox ${params.mailbox_email} to ${params.user_email}`);
+
+        if (params.permission_type === 'FullAccess') {
+          await exchangeCall(tenant, 'POST', '/InvokeCommand', {
+            CmdletInput: {
+              CmdletName: 'Add-MailboxPermission',
+              Parameters: {
+                Identity:     params.mailbox_email,
+                User:         params.user_email,
+                AccessRights: 'FullAccess',
+                AutoMapping:  false,
+              },
+            },
+          });
+
+        } else if (params.permission_type === 'SendAs') {
+          await exchangeCall(tenant, 'POST', '/InvokeCommand', {
+            CmdletInput: {
+              CmdletName: 'Add-RecipientPermission',
+              Parameters: {
+                Identity:     params.mailbox_email,
+                Trustee:      params.user_email,
+                AccessRights: 'SendAs',
+                Confirm:      false,
+              },
+            },
+          });
+
+        } else if (params.permission_type === 'SendOnBehalf') {
+          // SendOnBehalf is stored on the mailbox itself, not as a standalone permission
+          await exchangeCall(tenant, 'POST', '/InvokeCommand', {
+            CmdletInput: {
+              CmdletName: 'Set-Mailbox',
+              Parameters: {
+                Identity:              params.mailbox_email,
+                GrantSendOnBehalfTo:   `@{Add="${params.user_email}"}`,
+              },
+            },
+          });
+
+        } else {
+          throw new Error(`Unknown permission type: ${params.permission_type}. Use FullAccess, SendAs, or SendOnBehalf.`);
+        }
+
+        push('success', `✅ ${params.permission_type} granted on ${params.mailbox_email} to ${params.user_email}`);
         break;
       }
 
       case 'remove_mailbox_permission': {
-        push('info', `Revoking ${params.permission_type} on ${params.mailbox_email} from ${params.user_email}`);
-        push('success', `✅ Permission revoked.`);
+        push('info', `Revoking ${params.permission_type} on mailbox ${params.mailbox_email} from ${params.user_email}`);
+
+        if (params.permission_type === 'FullAccess') {
+          await exchangeCall(tenant, 'POST', '/InvokeCommand', {
+            CmdletInput: {
+              CmdletName: 'Remove-MailboxPermission',
+              Parameters: {
+                Identity:     params.mailbox_email,
+                User:         params.user_email,
+                AccessRights: 'FullAccess',
+                Confirm:      false,
+              },
+            },
+          });
+
+        } else if (params.permission_type === 'SendAs') {
+          await exchangeCall(tenant, 'POST', '/InvokeCommand', {
+            CmdletInput: {
+              CmdletName: 'Remove-RecipientPermission',
+              Parameters: {
+                Identity:     params.mailbox_email,
+                Trustee:      params.user_email,
+                AccessRights: 'SendAs',
+                Confirm:      false,
+              },
+            },
+          });
+
+        } else if (params.permission_type === 'SendOnBehalf') {
+          await exchangeCall(tenant, 'POST', '/InvokeCommand', {
+            CmdletInput: {
+              CmdletName: 'Set-Mailbox',
+              Parameters: {
+                Identity:            params.mailbox_email,
+                GrantSendOnBehalfTo: `@{Remove="${params.user_email}"}`,
+              },
+            },
+          });
+
+        } else {
+          throw new Error(`Unknown permission type: ${params.permission_type}.`);
+        }
+
+        push('success', `✅ ${params.permission_type} revoked on ${params.mailbox_email} from ${params.user_email}`);
         break;
       }
 

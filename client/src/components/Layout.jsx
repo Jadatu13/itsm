@@ -1,5 +1,7 @@
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { useEffect, useState, useCallback } from 'react'
+import { apiFetch } from '../utils/api'
 import styles from './Layout.module.css'
 
 const PAGE_TITLES = {
@@ -19,10 +21,39 @@ const PAGE_TITLES = {
   '/portal-branding':           'Portal Branding',
 }
 
+function NavBadge({ count }) {
+  if (!count) return null
+  return (
+    <span className={styles.badge}>
+      {count > 99 ? '99+' : count}
+    </span>
+  )
+}
+
 export default function Layout() {
   const location = useLocation()
   const { agent, logout } = useAuth()
   const navigate = useNavigate()
+
+  const [counts, setCounts] = useState({ pending_approvals: 0, awaiting_reply: 0, unassigned: 0 })
+
+  const fetchCounts = useCallback(() => {
+    apiFetch('/api/notifications/counts')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setCounts(d) })
+      .catch(() => {}) // silently fail — badges just won't update
+  }, [])
+
+  useEffect(() => {
+    fetchCounts()
+    const interval = setInterval(fetchCounts, 60_000)
+    return () => clearInterval(interval)
+  }, [fetchCounts])
+
+  // Re-fetch when the route changes (e.g. agent just approved something)
+  useEffect(() => {
+    fetchCounts()
+  }, [location.pathname, fetchCounts])
 
   const title = Object.entries(PAGE_TITLES).find(([path]) =>
     location.pathname === path || (path !== '/dashboard' && location.pathname.startsWith(path + '/'))
@@ -32,6 +63,10 @@ export default function Layout() {
     logout()
     navigate('/login')
   }
+
+  // Total ticket attention count: awaiting reply + unassigned (deduplicated by using awaiting_reply which includes new unassigned)
+  const ticketBadge    = counts.awaiting_reply
+  const approvalBadge  = counts.pending_approvals
 
   return (
     <div className={styles.shell}>
@@ -46,37 +81,47 @@ export default function Layout() {
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
             Dashboard
           </NavLink>
+
           <NavLink to="/tickets" className={({ isActive }) => isActive ? `${styles.navLink} ${styles.active}` : styles.navLink}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
             Tickets
+            <NavBadge count={ticketBadge} />
           </NavLink>
+
           <NavLink to="/contacts" className={({ isActive }) => isActive ? `${styles.navLink} ${styles.active}` : styles.navLink}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
             Contacts
           </NavLink>
+
           <NavLink to="/organisations" className={({ isActive }) => isActive ? `${styles.navLink} ${styles.active}` : styles.navLink}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
             Organisations
           </NavLink>
+
           <NavLink to="/kb" className={({ isActive }) => isActive ? `${styles.navLink} ${styles.active}` : styles.navLink}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
             Knowledge Base
           </NavLink>
+
           <NavLink to="/reports" className={({ isActive }) => isActive ? `${styles.navLink} ${styles.active}` : styles.navLink}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
             Reports
           </NavLink>
+
           <NavLink to="/automations" className={({ isActive }) => isActive ? `${styles.navLink} ${styles.active}` : styles.navLink}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
             Automations
           </NavLink>
+
           <NavLink to="/service-catalog" className={({ isActive }) => isActive ? `${styles.navLink} ${styles.active}` : styles.navLink}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg>
             Service Catalog
           </NavLink>
+
           <NavLink to="/approval-queue" className={({ isActive }) => isActive ? `${styles.navLink} ${styles.active}` : styles.navLink}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
             Approval Queue
+            <NavBadge count={approvalBadge} />
           </NavLink>
         </nav>
 

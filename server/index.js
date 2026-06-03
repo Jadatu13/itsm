@@ -20,6 +20,7 @@ const serviceCatalogRoutes = require('./routes/service-catalog');
 const brandingRoutes      = require('./routes/branding');
 const tenantRoutes        = require('./routes/tenants');
 const aiRoutes            = require('./routes/ai');
+const notificationRoutes  = require('./routes/notifications');
 const { startPoller }     = require('./inbound');
 
 const app  = express();
@@ -46,6 +47,7 @@ app.use('/api/service-catalog', requireAuth, serviceCatalogRoutes);
 app.use('/api/branding',        brandingRoutes);
 app.use('/api/tenants',         requireAuth, tenantRoutes);
 app.use('/api/ai',              requireAuth, aiRoutes);
+app.use('/api/notifications',   requireAuth, notificationRoutes);
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 app.get('/api/dashboard/stats', requireAuth, async (req, res) => {

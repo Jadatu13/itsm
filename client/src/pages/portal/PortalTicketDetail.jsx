@@ -30,8 +30,10 @@ export default function PortalTicketDetail() {
   const [replyBody, setReplyBody] = useState('')
   const [sending, setSending] = useState(false)
   const [error, setError] = useState('')
+  const [pendingFiles, setPendingFiles] = useState([])
   const bottomRef = useRef(null)
   const editorRef = useRef(null)
+  const fileInputRef = useRef(null)
 
   const contact = (() => {
     try { return JSON.parse(localStorage.getItem('portal_contact') || 'null') } catch { return null }
@@ -57,14 +59,28 @@ export default function PortalTicketDetail() {
     setSending(true)
     setError('')
     try {
-      const res = await portalFetch(`/api/portal/tickets/${id}/reply`, {
-        method: 'POST',
-        body: JSON.stringify({ body: replyBody }),
-      })
+      const token = sessionStorage.getItem('portal_preview_token') || localStorage.getItem('portal_token')
+      let res
+      if (pendingFiles.length > 0) {
+        const fd = new FormData()
+        fd.append('body', replyBody)
+        pendingFiles.forEach(f => fd.append('files', f))
+        res = await fetch(`/api/portal/tickets/${id}/reply`, {
+          method: 'POST',
+          headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+          body: fd,
+        })
+      } else {
+        res = await portalFetch(`/api/portal/tickets/${id}/reply`, {
+          method: 'POST',
+          body: JSON.stringify({ body: replyBody }),
+        })
+      }
       const data = await res.json()
       if (!res.ok) { setError(data.error || 'Failed to send reply.'); return }
       setReplies(prev => [...prev, data])
       setReplyBody('')
+      setPendingFiles([])
     } catch {
       setError('Failed to send reply.')
     } finally {
@@ -117,6 +133,16 @@ export default function PortalTicketDetail() {
                       {r.sender_name || (isAgent ? 'Support Agent' : 'You')}
                     </div>
                     <div dangerouslySetInnerHTML={{ __html: r.body }} />
+                    {r.attachments?.length > 0 && (
+                      <div className={styles.portalAttachmentList}>
+                        {r.attachments.map(att => (
+                          <a key={att.id} href={`/api/attachments/${att.id}`} target="_blank" rel="noopener noreferrer" className={styles.portalAttachmentLink}>
+                            📎 {att.original_name}
+                            <span className={styles.portalAttachmentSize}>{att.size_bytes ? ` (${Math.round(att.size_bytes / 1024)}KB)` : ''}</span>
+                          </a>
+                        ))}
+                      </div>
+                    )}
                     <div className={styles.messageTime}>{formatDate(r.created_at)}</div>
                   </div>
                 )
@@ -132,11 +158,32 @@ export default function PortalTicketDetail() {
                   onChange={setReplyBody}
                   placeholder="Write a reply…"
                 />
+                {pendingFiles.length > 0 && (
+                  <div className={styles.portalPendingFiles}>
+                    {pendingFiles.map((f, i) => (
+                      <span key={i} className={styles.portalFileChip}>
+                        📎 {f.name}
+                        <button type="button" onClick={() => setPendingFiles(prev => prev.filter((_, j) => j !== i))}>✕</button>
+                      </span>
+                    ))}
+                  </div>
+                )}
                 {error && <div className={styles.errorMsg}>{error}</div>}
-                <button type="submit" className={styles.btnPrimarySmall}
-                  disabled={sending || !replyBody.trim() || replyBody === '<p></p>'}>
-                  {sending ? 'Sending…' : 'Send Reply'}
-                </button>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'flex-end' }}>
+                  <button type="button" className={styles.portalAttachBtn} onClick={() => fileInputRef.current?.click()} title="Attach files">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+                    </svg>
+                    Attach
+                  </button>
+                  <input ref={fileInputRef} type="file" multiple style={{ display: 'none' }}
+                    onChange={e => setPendingFiles(prev => [...prev, ...Array.from(e.target.files)])}
+                  />
+                  <button type="submit" className={styles.btnPrimarySmall}
+                    disabled={sending || !replyBody.trim() || replyBody === '<p></p>'}>
+                    {sending ? 'Sending…' : 'Send Reply'}
+                  </button>
+                </div>
               </form>
             )}
           </div>

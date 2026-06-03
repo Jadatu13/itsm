@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { portalFetch } from '../../utils/portalApi'
 import styles from './Portal.module.css'
@@ -73,25 +73,57 @@ function UserPickerField({ multi, value, onChange, users, loading }) {
   )
 }
 
-function GroupPickerField({ value, onChange, groups, loading }) {
+// GroupPickerField — Option C: live debounced search from portal's connected Entra ID tenant
+function GroupPickerField({ value, onChange, formId }) {
   const [search, setSearch] = useState('')
   const [focused, setFocused] = useState(false)
-  const selected = groups.find(g => g.name === value)
-  const filtered = search
-    ? groups.filter(g => g.name.toLowerCase().includes(search.toLowerCase()))
-    : groups
+  const [results, setResults] = useState([])
+  const [searching, setSearching] = useState(false)
+  const debounceRef = useRef(null)
+
+  const doSearch = useCallback((q) => {
+    clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(async () => {
+      setSearching(true)
+      try {
+        const url = q.trim()
+          ? `/api/portal/graph/groups?form_id=${formId}&q=${encodeURIComponent(q.trim())}`
+          : `/api/portal/graph/groups?form_id=${formId}`
+        const res = await portalFetch(url)
+        const data = await res.json()
+        setResults(Array.isArray(data.groups) ? data.groups : [])
+      } catch {
+        setResults([])
+      } finally {
+        setSearching(false)
+      }
+    }, 300)
+  }, [formId])
+
+  function handleFocus() {
+    setFocused(true)
+    if (!results.length) doSearch(search)
+  }
+
+  function handleChange(e) {
+    setSearch(e.target.value)
+    setFocused(true)
+    doSearch(e.target.value)
+  }
+
   function select(name) {
     onChange(name)
     setSearch('')
     setFocused(false)
   }
+
   return (
     <div className={styles.userPickerWrap}>
-      {selected && !focused ? (
+      {value && !focused ? (
         <div className={styles.userPickerTags}>
           <span className={styles.userPickerTag}>
-            {selected.name}
-            <button type="button" className={styles.userPickerTagRemove} onClick={() => { onChange(''); setSearch('') }}>×</button>
+            {value}
+            <button type="button" className={styles.userPickerTagRemove} onClick={() => { onChange(''); setSearch(''); setResults([]) }}>×</button>
           </span>
         </div>
       ) : (
@@ -99,21 +131,27 @@ function GroupPickerField({ value, onChange, groups, loading }) {
           <input
             type="text"
             className={styles.userPickerSearch}
-            placeholder={loading ? 'Loading groups…' : `Click to browse ${groups.length} groups, or type to search…`}
+            placeholder={searching ? 'Searching groups…' : 'Type to search Entra ID groups…'}
             value={search}
-            onChange={e => setSearch(e.target.value)}
-            onFocus={() => setFocused(true)}
+            onChange={handleChange}
+            onFocus={handleFocus}
             onBlur={() => setTimeout(() => setFocused(false), 150)}
-            disabled={loading}
             autoComplete="off"
           />
           {focused && (
             <div className={styles.userPickerList}>
-              {filtered.length === 0 && (
-                <div className={styles.userPickerEmpty}>No groups found{search ? ` matching "${search}"` : ''}</div>
+              {searching && <div className={styles.userPickerEmpty}>Searching…</div>}
+              {!searching && results.length === 0 && (
+                <div className={styles.userPickerEmpty}>
+                  {search ? `No groups found matching "${search}"` : 'Type to search groups'}
+                </div>
               )}
-              {filtered.map(g => (
-                <div key={g.id} className={`${styles.userPickerItem} ${value === g.name ? styles.userPickerItemSelected : ''}`} onMouseDown={() => select(g.name)}>
+              {!searching && results.map(g => (
+                <div
+                  key={g.id}
+                  className={`${styles.userPickerItem} ${value === g.name ? styles.userPickerItemSelected : ''}`}
+                  onMouseDown={() => select(g.name)}
+                >
                   <span className={styles.userPickerItemName}>{g.name}</span>
                   {value === g.name && <span className={styles.userPickerCheck}>✓</span>}
                 </div>
@@ -138,8 +176,6 @@ export default function PortalServiceRequest() {
   const upnCheckTimer = useRef(null)
   const [graphUsers, setGraphUsers] = useState([])
   const [graphUsersLoading, setGraphUsersLoading] = useState(false)
-  const [graphGroups, setGraphGroups] = useState([])
-  const [graphGroupsLoading, setGraphGroupsLoading] = useState(false)
 
   useEffect(() => {
     portalFetch(`/api/portal/service-catalog/${id}`)
@@ -160,15 +196,7 @@ export default function PortalServiceRequest() {
               .catch(() => setGraphUsers([]))
               .finally(() => setGraphUsersLoading(false))
           }
-          // Fetch Graph groups if any group_picker fields exist
-          if (data.fields.some(f => f.type === 'group_picker')) {
-            setGraphGroupsLoading(true)
-            portalFetch(`/api/portal/graph/groups?form_id=${id}`)
-              .then(r => r.json())
-              .then(d => setGraphGroups(d.groups || []))
-              .catch(() => setGraphGroups([]))
-              .finally(() => setGraphGroupsLoading(false))
-          }
+          // group_picker fields now do live debounced search internally — no upfront fetch needed
         }
         setValues(init)
       })
@@ -408,8 +436,7 @@ export default function PortalServiceRequest() {
           <GroupPickerField
             value={values[field.id] || ''}
             onChange={val => setValue(field.id, val)}
-            groups={graphGroups}
-            loading={graphGroupsLoading}
+            formId={id}
           />
         )}
 

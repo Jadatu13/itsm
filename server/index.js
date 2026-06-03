@@ -21,6 +21,7 @@ const brandingRoutes      = require('./routes/branding');
 const tenantRoutes        = require('./routes/tenants');
 const aiRoutes            = require('./routes/ai');
 const notificationRoutes  = require('./routes/notifications');
+const attachmentRoutes    = require('./routes/attachments');
 const { startPoller }     = require('./inbound');
 
 const app  = express();
@@ -48,6 +49,7 @@ app.use('/api/branding',        brandingRoutes);
 app.use('/api/tenants',         requireAuth, tenantRoutes);
 app.use('/api/ai',              requireAuth, aiRoutes);
 app.use('/api/notifications',   requireAuth, notificationRoutes);
+app.use('/api/attachments',     requireAuth, attachmentRoutes);
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 app.get('/api/dashboard/stats', requireAuth, async (req, res) => {
@@ -254,9 +256,43 @@ app.listen(PORT, async () => {
         ADD COLUMN IF NOT EXISTS execution_log JSONB DEFAULT '[]'
     `);
 
+    // ── Ticket attachments ───────────────────────────────────────────────────
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS ticket_attachments (
+        id            SERIAL PRIMARY KEY,
+        ticket_id     INT  REFERENCES tickets(id)        ON DELETE CASCADE,
+        reply_id      INT  REFERENCES ticket_replies(id) ON DELETE SET NULL,
+        filename      TEXT NOT NULL,
+        original_name TEXT NOT NULL,
+        mime_type     TEXT,
+        size_bytes    INT,
+        created_at    TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    // ── Tenant group aliases ─────────────────────────────────────────────────
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS tenant_group_aliases (
+        id         SERIAL PRIMARY KEY,
+        tenant_id  INT  NOT NULL REFERENCES m365_tenants(id) ON DELETE CASCADE,
+        alias      TEXT NOT NULL,
+        group_name TEXT NOT NULL,
+        UNIQUE(tenant_id, alias)
+      )
+    `);
+
     console.log('[db] Migrations applied');
   } catch (err) {
     console.error('[db] Migration error:', err.message);
+  }
+
+  // Ensure uploads directory exists
+  try {
+    const fs = require('fs');
+    const uploadsDir = '/data/uploads';
+    if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+  } catch (err) {
+    console.error('[uploads] Could not create uploads dir:', err.message);
   }
 
   // Seed default admin if no agents exist

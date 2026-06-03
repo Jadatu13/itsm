@@ -6,6 +6,9 @@
 
 const { ImapFlow }    = require('imapflow');
 const { simpleParser } = require('mailparser');
+const { randomUUID }  = require('crypto');
+const fs              = require('fs');
+const path            = require('path');
 const db              = require('./db');
 const { decrypt }     = require('./lib/crypto');
 const { sendNewTicket } = require('./email');
@@ -77,6 +80,45 @@ function stripQuotedReply(text) {
   return result.join('\n').trim();
 }
 
+// Strip quoted HTML reply blocks by cutting at known divider patterns
+function stripQuotedHtml(html) {
+  if (!html) return '';
+  const dividers = [
+    /<div[^>]+id=["']divRplyFwdMsg["'][^>]*>/i,
+    /<div[^>]+class=["'][^"']*gmail_quote[^"']*["'][^>]*>/i,
+    /<div[^>]+class=["'][^"']*yahoo_quoted[^"']*["'][^>]*>/i,
+    /<blockquote[^>]*>/i,
+  ];
+  let cutIdx = html.length;
+  for (const pattern of dividers) {
+    const m = pattern.exec(html);
+    if (m && m.index < cutIdx) cutIdx = m.index;
+  }
+  return html.slice(0, cutIdx).trim();
+}
+
+// ─── Attachment saver ─────────────────────────────────────────────────────────
+
+async function saveAttachments(parsedAttachments, ticketId, replyId, htmlBody) {
+  let updatedHtml = htmlBody;
+  for (const att of (parsedAttachments || [])) {
+    if (!att.content || att.content.length < 100) continue;
+    const ext = path.extname(att.filename || '') || '';
+    const storedName = `${randomUUID()}${ext}`;
+    fs.writeFileSync(path.join('/data/uploads', storedName), att.content);
+    const saved = await db.query(
+      `INSERT INTO ticket_attachments (ticket_id, reply_id, filename, original_name, mime_type, size_bytes)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+      [ticketId, replyId || null, storedName, att.filename || storedName, att.contentType || null, att.content.length]
+    );
+    // Replace cid: references in HTML body
+    if (att.cid && updatedHtml) {
+      updatedHtml = updatedHtml.replace(new RegExp(`cid:${att.cid}`, 'g'), `/api/attachments/${saved.rows[0].id}`);
+    }
+  }
+  return updatedHtml;
+}
+
 // ─── Email processor ──────────────────────────────────────────────────────────
 
 async function processMessage(parsed) {
@@ -87,13 +129,19 @@ async function processMessage(parsed) {
   const senderName    = (fromAddr.name || '').trim();
   const subject       = (parsed.subject || '(No subject)').trim();
 
-  // Prefer plain text; strip tags from HTML as fallback — then strip quoted reply chain
-  const rawBody = (
-    parsed.text?.trim() ||
-    (parsed.html || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() ||
-    ''
-  );
-  const body = stripQuotedReply(rawBody);
+  // Prefer HTML; strip quoted HTML blocks. Fall back to plain text wrapped in <p>.
+  let htmlBody;
+  if (parsed.html) {
+    htmlBody = stripQuotedHtml(parsed.html);
+  } else if (parsed.text) {
+    const stripped = stripQuotedReply(parsed.text);
+    htmlBody = stripped.split(/\n\n+/).map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('');
+  } else {
+    htmlBody = '';
+  }
+
+  // Plain-text body for ticket description / email notifications (strip tags)
+  const plainBody = (htmlBody || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
 
   // ── Reply detection ──────────────────────────────────────────────────────
   // If the subject contains [TKT-XXXX] add a contact reply to that ticket.
@@ -102,16 +150,23 @@ async function processMessage(parsed) {
     const ref = `TKT-${refMatch[1].padStart(4, '0')}`;
     const found = await db.query(`SELECT id FROM tickets WHERE reference = $1`, [ref]);
     if (found.rows.length) {
-      await db.query(
+      const ticketId = found.rows[0].id;
+      const replyRes = await db.query(
         `INSERT INTO ticket_replies (ticket_id, body, is_agent_reply, is_internal)
-         VALUES ($1, $2, false, false)`,
-        [found.rows[0].id, body || '(empty)']
+         VALUES ($1, $2, false, false) RETURNING id`,
+        [ticketId, htmlBody || '(empty)']
       );
-      await db.query(`UPDATE tickets SET updated_at = NOW() WHERE id = $1`, [found.rows[0].id]);
+      const replyId = replyRes.rows[0].id;
+      // Save attachments
+      const updatedHtml = await saveAttachments(parsed.attachments, ticketId, replyId, htmlBody);
+      // If cid replacements happened, update the reply body
+      if (updatedHtml !== htmlBody) {
+        await db.query(`UPDATE ticket_replies SET body = $1 WHERE id = $2`, [updatedHtml, replyId]);
+      }
+      await db.query(`UPDATE tickets SET updated_at = NOW() WHERE id = $1`, [ticketId]);
       console.log(`[inbound] Reply added to ${ref}`);
       // Fire-and-forget automation for reply_received
-      const replyTicketId = found.rows[0].id;
-      db.query('SELECT * FROM tickets WHERE id=$1', [replyTicketId]).then(r => {
+      db.query('SELECT * FROM tickets WHERE id=$1', [ticketId]).then(r => {
         if (r.rows[0]) runAutomations(r.rows[0], 'reply_received', { db }).catch(e => console.error('[automation]', e));
       });
       return;
@@ -167,10 +222,13 @@ async function processMessage(parsed) {
   const ins = await db.query(
     `INSERT INTO tickets (subject, description, contact_id, priority, source, sla_due_at)
      VALUES ($1, $2, $3, 'low', 'email', NOW() + ($4 || ' hours')::INTERVAL) RETURNING id`,
-    [subject, body || '(empty)', contactId, String(slaHoursLow)]
+    [subject, plainBody || '(empty)', contactId, String(slaHoursLow)]
   );
 
   const ticketId = ins.rows[0].id;
+
+  // Save any attachments at the ticket level (no reply yet for new tickets from email)
+  await saveAttachments(parsed.attachments, ticketId, null, htmlBody);
 
   // Fetch full ticket for confirmation email
   const tRow = await db.query(
@@ -182,7 +240,7 @@ async function processMessage(parsed) {
   if (tRow.rows.length) {
     const { reference, contact_email, first_name: fn } = tRow.rows[0];
     console.log(`[inbound] Created ticket ${reference} from ${senderEmail}`);
-    sendNewTicket({ to: contact_email, firstName: fn, reference, subject, description: body });
+    sendNewTicket({ to: contact_email, firstName: fn, reference, subject, description: plainBody });
     // Fire-and-forget automation for ticket_created
     db.query('SELECT * FROM tickets WHERE id=$1', [ticketId]).then(r => {
       if (r.rows[0]) runAutomations(r.rows[0], 'ticket_created', { db }).catch(e => console.error('[automation]', e));

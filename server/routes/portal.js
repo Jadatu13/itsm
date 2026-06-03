@@ -373,9 +373,10 @@ router.get('/graph/users', portalAuth, async (req, res) => {
   }
 });
 
-// GET /api/portal/graph/groups?form_id=... — fetch live Entra ID groups for group_picker fields
+// GET /api/portal/graph/groups?form_id=...&q= — fetch live Entra ID groups for group_picker fields
+// Supports optional ?q= for filtered search (Option C portal picker)
 router.get('/graph/groups', portalAuth, async (req, res) => {
-  const { form_id } = req.query;
+  const { form_id, q = '' } = req.query;
   try {
     const tenant = await resolvePortalTenant(req.contact?.id);
     if (!tenant) return res.json({ groups: [], connected: false });
@@ -389,8 +390,12 @@ router.get('/graph/groups', portalAuth, async (req, res) => {
     if (!tokenRes.ok) return res.json({ groups: [], connected: false });
     const { access_token } = await tokenRes.json();
 
+    const filterParam = q.trim()
+      ? `?$filter=startswith(displayName,'${encodeURIComponent(q.trim())}')&$select=id,displayName&$top=20`
+      : `?$select=id,displayName&$top=999&$orderby=displayName`;
+
     const groupsRes = await fetch(
-      'https://graph.microsoft.com/v1.0/groups?$select=id,displayName&$top=999&$orderby=displayName',
+      `https://graph.microsoft.com/v1.0/groups${filterParam}`,
       { headers: { Authorization: `Bearer ${access_token}` } }
     );
     if (!groupsRes.ok) return res.json({ groups: [], connected: true });

@@ -1006,3 +1006,63 @@
   align-items: center;
   gap: 7px;
 }
+
+/* ── Group search combobox (Option B) ────────────────────────────── */
+.groupComboWrap {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.groupComboInput {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.groupComboSpinner {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 13px;
+  color: var(--text-muted);
+  animation: spin 0.8s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes spin {
+  from { transform: translateY(-50%) rotate(0deg); }
+  to   { transform: translateY(-50%) rotate(360deg); }
+}
+
+.groupComboDropdown {
+  position: absolute;
+  top: calc(100% + 3px);
+  left: 0;
+  right: 0;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+  z-index: 100;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.groupComboItem {
+  padding: 7px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  color: var(--text-primary);
+  border-bottom: 1px solid #F3F4F6;
+  transition: background 0.1s;
+}
+.groupComboItem:last-child { border-bottom: none; }
+.groupComboItem:hover, .groupComboItemActive { background: #EEF2FF; color: #4338CA; }
+
+.groupComboEmpty {
+  padding: 10px 12px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  font-style: italic;
+}

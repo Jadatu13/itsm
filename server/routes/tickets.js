@@ -1,8 +1,19 @@
 const express = require('express');
 const router = express.Router();
+const path = require('path');
+const multer = require('multer');
 const db = require('../db');
 const { sendNewTicket, sendAgentReply, sendTicketResolved } = require('../email');
 const { runAutomations } = require('../automations');
+
+const storage = multer.diskStorage({
+  destination: '/data/uploads',
+  filename: (req, file, cb) => {
+    const { randomUUID } = require('crypto');
+    cb(null, `${randomUUID()}${path.extname(file.originalname)}`);
+  },
+});
+const upload = multer({ storage, limits: { fileSize: 25 * 1024 * 1024 } });
 
 // GET /api/tickets
 // status=active  → all non-resolved (default in UI)
@@ -347,7 +358,26 @@ router.get('/:id/replies', async (req, res) => {
        ORDER BY r.created_at ASC`,
       [req.params.id]
     );
-    res.json(result.rows);
+    const replies = result.rows;
+
+    // Fetch attachments for all replies
+    if (replies.length) {
+      const replyIds = replies.map(r => r.id);
+      const attResult = await db.query(
+        `SELECT * FROM ticket_attachments WHERE reply_id = ANY($1::int[])`,
+        [replyIds]
+      );
+      const attMap = {};
+      for (const att of attResult.rows) {
+        if (!attMap[att.reply_id]) attMap[att.reply_id] = [];
+        attMap[att.reply_id].push(att);
+      }
+      for (const reply of replies) {
+        reply.attachments = attMap[reply.id] || [];
+      }
+    }
+
+    res.json(replies);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to fetch replies' });
@@ -355,7 +385,7 @@ router.get('/:id/replies', async (req, res) => {
 });
 
 // POST /api/tickets/:id/replies
-router.post('/:id/replies', async (req, res) => {
+router.post('/:id/replies', upload.array('files', 10), async (req, res) => {
   const { body, is_agent_reply, is_internal } = req.body;
   if (!body) return res.status(400).json({ error: 'body is required' });
   const isAgent    = is_agent_reply === true || is_agent_reply === 'true';
@@ -376,7 +406,22 @@ router.post('/:id/replies', async (req, res) => {
        RETURNING *`,
       [req.params.id, body, isAgent || isInternal, isInternal, senderName]
     );
-    res.status(201).json(result.rows[0]);
+    const reply = result.rows[0];
+
+    // Save uploaded files to ticket_attachments
+    const attachments = [];
+    if (req.files && req.files.length) {
+      for (const file of req.files) {
+        const attResult = await db.query(
+          `INSERT INTO ticket_attachments (ticket_id, reply_id, filename, original_name, mime_type, size_bytes)
+           VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+          [req.params.id, reply.id, file.filename, file.originalname, file.mimetype, file.size]
+        );
+        attachments.push(attResult.rows[0]);
+      }
+    }
+
+    res.status(201).json({ ...reply, attachments });
 
     // Only email the contact for non-internal agent replies
     if (isAgent && !isInternal) {
@@ -394,7 +439,7 @@ router.post('/:id/replies', async (req, res) => {
            AND r.is_internal = false
            AND r.id != $2
          ORDER BY r.created_at DESC`,
-        [req.params.id, result.rows[0].id]
+        [req.params.id, reply.id]
       );
       sendAgentReply({
         to:            email,

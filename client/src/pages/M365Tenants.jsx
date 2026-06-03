@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { apiFetch } from '../utils/api'
 import styles from './M365Tenants.module.css'
 import ConfirmModal from '../components/ConfirmModal'
@@ -200,6 +200,200 @@ function ConnectModal({ onClose, onConnected, orgs }) {
   )
 }
 
+// ── Aliases section (Option A) ────────────────────────────────────────────────
+function AliasesSection({ tenantId }) {
+  const [open, setOpen] = useState(false)
+  const [aliases, setAliases] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [editingId, setEditingId] = useState(null) // alias id being edited, or 'new'
+  const [form, setForm] = useState({ alias: '', group_name: '' })
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  function load() {
+    setLoading(true)
+    apiFetch(`/api/tenants/${tenantId}/aliases`)
+      .then(r => r.json())
+      .then(d => setAliases(Array.isArray(d) ? d : []))
+      .catch(() => setAliases([]))
+      .finally(() => setLoading(false))
+  }
+
+  function handleToggle() {
+    if (!open) load()
+    setOpen(v => !v)
+    setEditingId(null)
+    setError('')
+  }
+
+  function startNew() {
+    setEditingId('new')
+    setForm({ alias: '', group_name: '' })
+    setError('')
+  }
+
+  function startEdit(a) {
+    setEditingId(a.id)
+    setForm({ alias: a.alias, group_name: a.group_name })
+    setError('')
+  }
+
+  function cancelEdit() {
+    setEditingId(null)
+    setError('')
+  }
+
+  async function handleSave() {
+    if (!form.alias.trim() || !form.group_name.trim()) {
+      setError('Both alias and group name are required.')
+      return
+    }
+    setSaving(true)
+    setError('')
+    try {
+      const isNew = editingId === 'new'
+      const url = isNew
+        ? `/api/tenants/${tenantId}/aliases`
+        : `/api/tenants/${tenantId}/aliases/${editingId}`
+      const res = await apiFetch(url, {
+        method: isNew ? 'POST' : 'PUT',
+        body: JSON.stringify(form),
+      })
+      const data = await res.json()
+      if (!res.ok) { setError(data.error || 'Save failed.'); return }
+      if (isNew) {
+        setAliases(prev => [...prev, data].sort((a, b) => a.alias.localeCompare(b.alias)))
+      } else {
+        setAliases(prev => prev.map(a => a.id === editingId ? data : a))
+      }
+      setEditingId(null)
+    } catch {
+      setError('Save failed.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleDelete(id) {
+    if (!window.confirm('Delete this alias?')) return
+    await apiFetch(`/api/tenants/${tenantId}/aliases/${id}`, { method: 'DELETE' })
+    setAliases(prev => prev.filter(a => a.id !== id))
+  }
+
+  return (
+    <div className={styles.aliasesSection}>
+      <button
+        type="button"
+        className={styles.aliasesToggle}
+        onClick={handleToggle}
+      >
+        <span className={styles.aliasesToggleArrow}>{open ? '▾' : '▸'}</span>
+        Group Aliases
+        {aliases.length > 0 && !loading && (
+          <span className={styles.aliasesBadge}>{aliases.length}</span>
+        )}
+      </button>
+
+      {open && (
+        <div className={styles.aliasesBody}>
+          <p className={styles.aliasesHint}>
+            Map friendly names to real Entra ID group names. Service catalog automations will resolve these before searching.
+          </p>
+
+          {loading ? (
+            <p className={styles.aliasesEmpty}>Loading…</p>
+          ) : (
+            <>
+              {aliases.length > 0 && (
+                <table className={styles.aliasTable}>
+                  <thead>
+                    <tr>
+                      <th>Alias (used in form)</th>
+                      <th>Real Entra ID Group Name</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {aliases.map(a => (
+                      <tr key={a.id}>
+                        {editingId === a.id ? (
+                          <>
+                            <td>
+                              <input
+                                className={styles.aliasInput}
+                                value={form.alias}
+                                onChange={e => setForm(f => ({ ...f, alias: e.target.value }))}
+                                placeholder="Alias"
+                              />
+                            </td>
+                            <td>
+                              <input
+                                className={styles.aliasInput}
+                                value={form.group_name}
+                                onChange={e => setForm(f => ({ ...f, group_name: e.target.value }))}
+                                placeholder="Real group name"
+                              />
+                            </td>
+                            <td className={styles.aliasRowActions}>
+                              <button className={styles.aliasSaveBtn} onClick={handleSave} disabled={saving}>
+                                {saving ? '…' : 'Save'}
+                              </button>
+                              <button className={styles.aliasCancelBtn} onClick={cancelEdit}>Cancel</button>
+                            </td>
+                          </>
+                        ) : (
+                          <>
+                            <td><code className={styles.aliasCode}>{a.alias}</code></td>
+                            <td>{a.group_name}</td>
+                            <td className={styles.aliasRowActions}>
+                              <button className={styles.aliasEditBtn} onClick={() => startEdit(a)}>Edit</button>
+                              <button className={styles.aliasDeleteBtn} onClick={() => handleDelete(a.id)}>Delete</button>
+                            </td>
+                          </>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+
+              {aliases.length === 0 && editingId !== 'new' && (
+                <p className={styles.aliasesEmpty}>No aliases configured.</p>
+              )}
+
+              {editingId === 'new' ? (
+                <div className={styles.aliasNewRow}>
+                  <input
+                    className={styles.aliasInput}
+                    value={form.alias}
+                    onChange={e => setForm(f => ({ ...f, alias: e.target.value }))}
+                    placeholder="Alias (e.g. IT Support)"
+                    autoFocus
+                  />
+                  <input
+                    className={styles.aliasInput}
+                    value={form.group_name}
+                    onChange={e => setForm(f => ({ ...f, group_name: e.target.value }))}
+                    placeholder="Real group name (e.g. sg-IT-Support)"
+                  />
+                  <button className={styles.aliasSaveBtn} onClick={handleSave} disabled={saving}>
+                    {saving ? 'Saving…' : 'Add'}
+                  </button>
+                  <button className={styles.aliasCancelBtn} onClick={cancelEdit}>Cancel</button>
+                </div>
+              ) : (
+                <button className={styles.aliasAddBtn} onClick={startNew}>+ Add Alias</button>
+              )}
+
+              {error && <p className={styles.aliasError}>{error}</p>}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function M365Tenants() {
   const [tenants, setTenants] = useState([])
   const [orgs, setOrgs] = useState([])
@@ -335,6 +529,8 @@ export default function M365Tenants() {
                   </select>
                   {t.id in linkingOrg && <span className={styles.tenantOrgSaving}>Saving…</span>}
                 </div>
+                <AliasesSection tenantId={t.id} />
+
                 {testResult[t.id] && (
                   <div className={testResult[t.id].ok ? styles.testOk : styles.testFail}>
                     {testResult[t.id].msg}

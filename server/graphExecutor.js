@@ -501,6 +501,21 @@ function mockExecute(actionType, params, contactEmail = null) {
   return { success: true, mock: true, log };
 }
 
+// ── Group name alias resolver (Option A) ─────────────────────────────────────
+// Looks up tenant_group_aliases; if a match is found, returns the real group name,
+// otherwise returns the raw name unchanged.
+async function resolveGroupName(tenant, rawName) {
+  try {
+    const r = await db.query(
+      `SELECT group_name FROM tenant_group_aliases WHERE tenant_id = $1 AND alias = $2`,
+      [tenant.id, rawName]
+    );
+    return r.rows[0]?.group_name || rawName;
+  } catch {
+    return rawName;
+  }
+}
+
 // ── Live execution ────────────────────────────────────────────────────────────
 async function liveExecute(tenant, actionType, params, contactEmail = null) {
   const ts = () => new Date().toISOString();
@@ -705,6 +720,7 @@ async function liveExecute(tenant, actionType, params, contactEmail = null) {
       }
 
       case 'add_to_group': {
+        params.group_name = await resolveGroupName(tenant, params.group_name);
         push('info', `Looking up group: ${params.group_name}`);
         const groups = await graphCall(tenant, 'GET', `/groups?$filter=displayName eq '${encodeURIComponent(params.group_name)}'&$select=id,displayName`);
         const group = groups.value?.[0];
@@ -726,6 +742,7 @@ async function liveExecute(tenant, actionType, params, contactEmail = null) {
       }
 
       case 'remove_from_group': {
+        params.group_name = await resolveGroupName(tenant, params.group_name);
         push('info', `Looking up group: ${params.group_name}`);
         const rgroups = await graphCall(tenant, 'GET', `/groups?$filter=displayName eq '${encodeURIComponent(params.group_name)}'&$select=id,displayName`);
         const rgroup = rgroups.value?.[0];

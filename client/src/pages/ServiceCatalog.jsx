@@ -1,7 +1,95 @@
-import { useEffect, useState, useRef } from 'react'
+import { useCallback, useEffect, useState, useRef } from 'react'
 import { apiFetch } from '../utils/api'
 import styles from './ServiceCatalog.module.css'
 import ConfirmModal from '../components/ConfirmModal'
+
+// ── Group search combobox (Option B) ─────────────────────────────────────────
+// Renders a debounced live-search input against /api/tenants/:id/groups/search
+// Only used when a specific tenant is selected in the form builder.
+function GroupSearchCombobox({ tenantId, value, onChange, placeholder }) {
+  const [query, setQuery] = useState(value || '')
+  const [results, setResults] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [open, setOpen] = useState(false)
+  const debounceRef = useRef(null)
+
+  // Keep local query in sync if the value is cleared externally
+  useEffect(() => { if (!value) setQuery('') }, [value])
+
+  const search = useCallback((q) => {
+    clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(async () => {
+      setLoading(true)
+      try {
+        const url = q.trim()
+          ? `/api/tenants/${tenantId}/groups/search?q=${encodeURIComponent(q.trim())}`
+          : `/api/tenants/${tenantId}/groups/search`
+        const res = await apiFetch(url)
+        const data = await res.json()
+        setResults(Array.isArray(data.value) ? data.value : [])
+      } catch {
+        setResults([])
+      } finally {
+        setLoading(false)
+      }
+    }, 300)
+  }, [tenantId])
+
+  function handleChange(e) {
+    const q = e.target.value
+    setQuery(q)
+    onChange(q) // keep fixed_value in sync with typed text
+    setOpen(true)
+    search(q)
+  }
+
+  function handleFocus() {
+    setOpen(true)
+    if (!results.length) search(query)
+  }
+
+  function handleSelect(displayName) {
+    setQuery(displayName)
+    onChange(displayName)
+    setOpen(false)
+    setResults([])
+  }
+
+  return (
+    <div className={styles.groupComboWrap}>
+      <input
+        type="text"
+        className={`${styles.paramFixed} ${styles.groupComboInput}`}
+        value={query}
+        onChange={handleChange}
+        onFocus={handleFocus}
+        onBlur={() => setTimeout(() => setOpen(false), 180)}
+        placeholder={placeholder || 'Search groups…'}
+        autoComplete="off"
+        spellCheck={false}
+      />
+      {loading && <span className={styles.groupComboSpinner}>⟳</span>}
+      {open && results.length > 0 && (
+        <div className={styles.groupComboDropdown}>
+          {results.map(g => (
+            <div
+              key={g.id}
+              className={`${styles.groupComboItem} ${g.displayName === value ? styles.groupComboItemActive : ''}`}
+              onMouseDown={() => handleSelect(g.displayName)}
+            >
+              {g.displayName}
+            </div>
+          ))}
+        </div>
+      )}
+      {open && !loading && results.length === 0 && query.trim() && (
+        <div className={styles.groupComboDropdown}>
+          <div className={styles.groupComboEmpty}>No groups found for "{query}"</div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 // M365 automation action definitions (mirrors server/graphExecutor.js)
 const ACTION_TYPES = {
@@ -1420,6 +1508,16 @@ function FormBuilderModal({ form, onClose, onSave }) {
                                       <option key={o.value} value={o.value}>{o.label}</option>
                                     ))}
                                   </select>
+                                ) : param.key === 'group_name' && automationTenantId ? (
+                                  // Group name with a specific tenant selected — show live search combobox
+                                  <GroupSearchCombobox
+                                    tenantId={automationTenantId}
+                                    value={fixedVal}
+                                    onChange={val => setAutomationActions(prev => prev.map((a, i) =>
+                                      i === idx ? { ...a, fixed_values: { ...a.fixed_values, [param.key]: val } } : a
+                                    ))}
+                                    placeholder="Search groups…"
+                                  />
                                 ) : (
                                   <input
                                     className={styles.paramFixed}
@@ -1427,7 +1525,11 @@ function FormBuilderModal({ form, onClose, onSave }) {
                                     onChange={e => setAutomationActions(prev => prev.map((a, i) =>
                                       i === idx ? { ...a, fixed_values: { ...a.fixed_values, [param.key]: e.target.value } } : a
                                     ))}
-                                    placeholder={`Fixed: ${param.label}`}
+                                    placeholder={
+                                      param.key === 'group_name'
+                                        ? 'Select a specific tenant above to enable group search'
+                                        : `Fixed: ${param.label}`
+                                    }
                                   />
                                 )
                               )}

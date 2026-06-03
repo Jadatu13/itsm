@@ -259,4 +259,121 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
+// ── Group aliases (Option A) ───────────────────────────────────────────────
+
+// GET /:id/aliases — list aliases for a tenant
+router.get('/:id/aliases', async (req, res) => {
+  try {
+    const result = await db.query(
+      `SELECT id, alias, group_name FROM tenant_group_aliases WHERE tenant_id = $1 ORDER BY alias`,
+      [req.params.id]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch aliases' });
+  }
+});
+
+// POST /:id/aliases — create alias
+router.post('/:id/aliases', async (req, res) => {
+  const { alias, group_name } = req.body;
+  if (!alias?.trim() || !group_name?.trim()) {
+    return res.status(400).json({ error: 'alias and group_name are required.' });
+  }
+  try {
+    const result = await db.query(
+      `INSERT INTO tenant_group_aliases (tenant_id, alias, group_name) VALUES ($1, $2, $3)
+       ON CONFLICT (tenant_id, alias) DO UPDATE SET group_name = EXCLUDED.group_name
+       RETURNING *`,
+      [req.params.id, alias.trim(), group_name.trim()]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to create alias' });
+  }
+});
+
+// PUT /:id/aliases/:aliasId — update alias
+router.put('/:id/aliases/:aliasId', async (req, res) => {
+  const { alias, group_name } = req.body;
+  if (!alias?.trim() || !group_name?.trim()) {
+    return res.status(400).json({ error: 'alias and group_name are required.' });
+  }
+  try {
+    const result = await db.query(
+      `UPDATE tenant_group_aliases SET alias = $1, group_name = $2
+       WHERE id = $3 AND tenant_id = $4 RETURNING *`,
+      [alias.trim(), group_name.trim(), req.params.aliasId, req.params.id]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: 'Alias not found' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    if (err.code === '23505') return res.status(409).json({ error: 'An alias with that name already exists for this tenant.' });
+    console.error(err);
+    res.status(500).json({ error: 'Failed to update alias' });
+  }
+});
+
+// DELETE /:id/aliases/:aliasId — delete alias
+router.delete('/:id/aliases/:aliasId', async (req, res) => {
+  try {
+    await db.query(
+      `DELETE FROM tenant_group_aliases WHERE id = $1 AND tenant_id = $2`,
+      [req.params.aliasId, req.params.id]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to delete alias' });
+  }
+});
+
+// ── Group search (Option B) ───────────────────────────────────────────────
+
+// GET /:id/groups/search?q= — search Entra ID groups for a tenant
+router.get('/:id/groups/search', async (req, res) => {
+  const { q = '' } = req.query;
+  try {
+    const r = await db.query('SELECT * FROM m365_tenants WHERE id = $1', [req.params.id]);
+    if (!r.rows.length) return res.status(404).json({ error: 'Tenant not found' });
+    const tenant = r.rows[0];
+
+    // Get a fresh token
+    const tokenUrl = `https://login.microsoftonline.com/${tenant.tenant_id}/oauth2/v2.0/token`;
+    const tokenBody = new URLSearchParams({
+      grant_type: 'client_credentials',
+      client_id: tenant.client_id,
+      client_secret: tenant.client_secret,
+      scope: 'https://graph.microsoft.com/.default',
+    });
+    const tokenRes = await fetch(tokenUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: tokenBody.toString(),
+    });
+    if (!tokenRes.ok) return res.status(502).json({ error: 'Failed to get tenant token' });
+    const { access_token } = await tokenRes.json();
+
+    const filterParam = q.trim()
+      ? `?$filter=startswith(displayName,'${encodeURIComponent(q.trim())}')&$select=id,displayName&$top=20`
+      : `?$select=id,displayName&$top=20&$orderby=displayName`;
+
+    const groupsRes = await fetch(
+      `https://graph.microsoft.com/v1.0/groups${filterParam}`,
+      { headers: { Authorization: `Bearer ${access_token}` } }
+    );
+    if (!groupsRes.ok) {
+      const errData = await groupsRes.json().catch(() => ({}));
+      return res.status(groupsRes.status).json({ error: errData?.error?.message || 'Graph API error' });
+    }
+    const { value = [] } = await groupsRes.json();
+    res.json({ value: value.map(g => ({ id: g.id, displayName: g.displayName })) });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

@@ -33,10 +33,12 @@ export default function TicketDetail() {
   const [showMerge, setShowMerge] = useState(false)
   const [draftingAi, setDraftingAi] = useState(false)
   const [aiError, setAiError]       = useState(null)
+  const [pendingFiles, setPendingFiles] = useState([])
 
   const isFirstLoad  = useRef(true)
   const repliesEndRef = useRef(null)
   const editorRef = useRef(null)
+  const fileInputRef = useRef(null)
 
   function load() {
     return Promise.all([
@@ -89,10 +91,25 @@ export default function TicketDetail() {
     setSending(true)
     setReplyError(null)
 
-    const res = await apiFetch(`/api/tickets/${id}/replies`, {
-      method: 'POST',
-      body: JSON.stringify({ body, is_agent_reply: true, is_internal: isInternal }),
-    })
+    let res
+    if (pendingFiles.length > 0) {
+      const fd = new FormData()
+      fd.append('body', body)
+      fd.append('is_agent_reply', 'true')
+      fd.append('is_internal', isInternal ? 'true' : 'false')
+      pendingFiles.forEach(f => fd.append('files', f))
+      const token = localStorage.getItem('token') || sessionStorage.getItem('token')
+      res = await fetch(`/api/tickets/${id}/replies`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: fd,
+      })
+    } else {
+      res = await apiFetch(`/api/tickets/${id}/replies`, {
+        method: 'POST',
+        body: JSON.stringify({ body, is_agent_reply: true, is_internal: isInternal }),
+      })
+    }
 
     if (!res.ok) {
       const d = await res.json()
@@ -111,6 +128,7 @@ export default function TicketDetail() {
     }
 
     setReplyBody('')   // triggers editor clear via useEffect in RichTextEditor
+    setPendingFiles([])
     const updated = await apiFetch(`/api/tickets/${id}/replies`).then(r => r.json())
     setReplies(updated)
     setTicket(t => ({ ...t, updated_at: new Date().toISOString() }))
@@ -188,6 +206,16 @@ export default function TicketDetail() {
                   <span className={styles.ts}>{formatDate(r.created_at)}</span>
                 </div>
                 <div className={styles.bubbleBody} dangerouslySetInnerHTML={{ __html: r.body }} />
+                {r.attachments?.length > 0 && (
+                  <div className={styles.attachmentList}>
+                    {r.attachments.map(att => (
+                      <a key={att.id} href={`/api/attachments/${att.id}`} target="_blank" rel="noopener noreferrer" className={styles.attachmentLink}>
+                        📎 {att.original_name}
+                        <span className={styles.attachmentSize}>{att.size_bytes ? ` (${Math.round(att.size_bytes / 1024)}KB)` : ''}</span>
+                      </a>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
             <div ref={repliesEndRef} />
@@ -215,6 +243,15 @@ export default function TicketDetail() {
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
                   KB Article
                 </button>
+                <button type="button" className={styles.cannedBtn} onClick={() => fileInputRef.current?.click()} title="Attach files">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+                  </svg>
+                  Attach
+                </button>
+                <input ref={fileInputRef} type="file" multiple style={{ display: 'none' }}
+                  onChange={e => setPendingFiles(prev => [...prev, ...Array.from(e.target.files)])}
+                />
                 <button type="button" className={styles.aiBtn} onClick={draftWithAi} disabled={draftingAi} title="Draft a reply using AI">
                   {draftingAi
                     ? <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg> Drafting…</>
@@ -230,6 +267,16 @@ export default function TicketDetail() {
                 internalMode={isInternal}
                 ref={editorRef}
               />
+              {pendingFiles.length > 0 && (
+                <div className={styles.pendingFiles}>
+                  {pendingFiles.map((f, i) => (
+                    <span key={i} className={styles.fileChip}>
+                      📎 {f.name}
+                      <button type="button" onClick={() => setPendingFiles(prev => prev.filter((_, j) => j !== i))}>✕</button>
+                    </span>
+                  ))}
+                </div>
+              )}
               {replyError && <div className={styles.replyError}>{replyError}</div>}
               {aiError && <div className={styles.replyError}>✕ {aiError}</div>}
               <div className={styles.replyActions}>

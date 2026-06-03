@@ -609,3 +609,51 @@
 }
 .btnMergeConfirm:hover:not(:disabled) { background: #6D28D9; }
 .btnMergeConfirm:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── File attachments ─────────────────────────────────────────────────────── */
+.pendingFiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 0 0;
+}
+.fileChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  border-radius: 20px;
+  padding: 3px 10px;
+  font-size: 12px;
+  color: #374151;
+}
+.fileChip button {
+  background: none;
+  border: none;
+  color: #9ca3af;
+  cursor: pointer;
+  font-size: 11px;
+  padding: 0;
+  line-height: 1;
+}
+.fileChip button:hover { color: #ef4444; }
+
+.attachmentList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(0,0,0,0.08);
+}
+.attachmentLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12.5px;
+  color: #4F7FFF;
+  text-decoration: none;
+}
+.attachmentLink:hover { text-decoration: underline; }
+.attachmentSize { color: #9ca3af; font-size: 11px; }

@@ -215,7 +215,18 @@ function esc(str) {
 }
 
 function stripTags(html) {
-  return String(html || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  return String(html || '')
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, ' ')   // remove style blocks entirely
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, ' ') // remove script blocks entirely
+    .replace(/<[^>]+>/g, ' ')                           // strip remaining tags
+    .replace(/&nbsp;/g, ' ')                            // decode common entities
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function inlineEmailStyles(html) {

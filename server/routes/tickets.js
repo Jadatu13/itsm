@@ -565,7 +565,7 @@ router.post('/:id/replies', upload.array('files', 10), async (req, res) => {
         if (!info.rows.length) return;
         const { reference, subject, assigned_to, contact_name } = info.rows[0];
         const recipients = await getRecipients(assigned_to);
-        const plainPreview = body.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+        const plainPreview = body.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, ' ').replace(/<script[^>]*>[\s\S]*?<\/script>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
         for (const rec of recipients) {
           sendAgentNotification({
             to:            rec.email,
@@ -585,7 +585,7 @@ router.post('/:id/replies', upload.array('files', 10), async (req, res) => {
     if (isInternal) {
       agentEmailEnabled().then(async enabled => {
         if (!enabled) return;
-        const plainBody = body.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+        const plainBody = body.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, ' ').replace(/<script[^>]*>[\s\S]*?<\/script>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
         const mentionMatches = plainBody.match(/@([A-Za-z][A-Za-z0-9 _-]{0,49})/g);
         if (!mentionMatches || !mentionMatches.length) return;
 

@@ -146,7 +146,7 @@ async function sendAgentReply({ to, firstName, reference, ticketSubject, replyBo
             <span style="font-size:12px;font-weight:600;color:${r.is_agent_reply ? '#4F7FFF' : '#374151'};">${esc(r.sender_name)}</span>
             <span style="font-size:11px;color:#9ca3af;">${new Date(r.created_at).toLocaleString('en-NZ', { day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' })}</span>
           </div>
-          <div style="font-size:13px;color:#6b7280;line-height:1.55;border-left:2px solid #e5e5e0;padding-left:10px;">${inlineEmailStyles(r.is_agent_reply ? r.body : esc(r.body))}</div>
+          <div style="font-size:13px;color:#6b7280;line-height:1.55;border-left:2px solid #e5e5e0;padding-left:10px;white-space:pre-wrap;">${r.is_agent_reply ? inlineEmailStyles(r.body) : esc(stripTags(r.body))}</div>
         </div>`).join('')}
     </div>` : '';
 

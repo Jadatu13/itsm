@@ -39,6 +39,41 @@
   color: #fff;
 }
 
+/* ── Search trigger button ────────────────────────────────────────────────── */
+.searchTrigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 12px 8px;
+  padding: 7px 10px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 7px;
+  color: rgba(255,255,255,0.55);
+  font-size: 12.5px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  text-align: left;
+}
+.searchTrigger:hover {
+  background: rgba(255,255,255,0.1);
+  border-color: rgba(255,255,255,0.22);
+  color: rgba(255,255,255,0.85);
+}
+.searchTrigger span { flex: 1; }
+
+.searchKbd {
+  font-size: 10.5px;
+  font-family: inherit;
+  color: rgba(255,255,255,0.35);
+  background: rgba(0,0,0,0.2);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 4px;
+  padding: 1px 5px;
+  flex-shrink: 0;
+}
+
 .nav {
   display: flex;
   flex-direction: column;

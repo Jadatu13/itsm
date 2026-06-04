@@ -6,6 +6,23 @@ import styles from './Settings.module.css'
 
 const PASS_SENTINEL = '__UNCHANGED__'
 
+const ENTITY_LABELS = {
+  ticket: 'Ticket',
+  contact: 'Contact',
+  agent: 'Agent',
+}
+
+const ACTION_LABELS = {
+  'ticket.status_changed': 'Status changed',
+  'ticket.assigned':       'Assigned',
+  'ticket.deleted':        'Deleted',
+  'contact.deleted':       'Contact deleted',
+  'contact.merged':        'Contact merged',
+  'agent.created':         'Agent created',
+  'agent.deleted':         'Agent deleted',
+  'agent.role_changed':    'Role changed',
+}
+
 export default function Settings() {
   // ── SMTP state ────────────────────────────────────────────────────────────
   const [form, setForm] = useState({
@@ -39,6 +56,19 @@ export default function Settings() {
   const [slaLoading, setSlaLoading]   = useState(true)
   const [slaSaving, setSlaSaving]     = useState(false)
   const [slaMsg, setSlaMsg]           = useState(null)
+
+  // ── Audit log state ──────────────────────────────────────────────────────
+  const [auditRows, setAuditRows]         = useState([])
+  const [auditLoading, setAuditLoading]   = useState(true)
+  const [auditFilter, setAuditFilter]     = useState('')
+
+  // ── 2FA state ─────────────────────────────────────────────────────────────
+  const [totpEnabled, setTotpEnabled]     = useState(false)
+  const [totpLoading, setTotpLoading]     = useState(true)
+  const [totpSetup, setTotpSetup]         = useState(null)  // { secret, otpauthUrl, qrCodeUrl }
+  const [totpCode, setTotpCode]           = useState('')
+  const [totpMsg, setTotpMsg]             = useState(null)
+  const [totpWorking, setTotpWorking]     = useState(false)
 
   // ── Inbound (IMAP) state ──────────────────────────────────────────────────
   const [inbound, setInbound] = useState({
@@ -133,6 +163,72 @@ export default function Settings() {
       setSlaMsg({ ok: false, text: 'Something went wrong.' })
     }
     setSlaSaving(false)
+  }
+
+  useEffect(() => {
+    apiFetch('/api/audit?limit=100')
+      .then(r => r.ok ? r.json() : [])
+      .then(d => { setAuditRows(Array.isArray(d) ? d : []); setAuditLoading(false) })
+      .catch(() => setAuditLoading(false))
+  }, [])
+
+  useEffect(() => {
+    apiFetch('/api/auth/2fa/status')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setTotpEnabled(d.totp_enabled); setTotpLoading(false) })
+      .catch(() => setTotpLoading(false))
+  }, [])
+
+  async function handle2faSetup() {
+    setTotpWorking(true)
+    setTotpMsg(null)
+    try {
+      const res = await apiFetch('/api/auth/2fa/setup', { method: 'POST' })
+      const d = await res.json()
+      if (res.ok) { setTotpSetup(d); setTotpCode('') }
+      else setTotpMsg({ ok: false, text: d.error || 'Failed to set up 2FA.' })
+    } catch { setTotpMsg({ ok: false, text: 'Something went wrong.' }) }
+    setTotpWorking(false)
+  }
+
+  async function handle2faVerify(e) {
+    e.preventDefault()
+    if (!totpCode.trim()) return
+    setTotpWorking(true)
+    setTotpMsg(null)
+    try {
+      const res = await apiFetch('/api/auth/2fa/verify', {
+        method: 'POST', body: JSON.stringify({ code: totpCode.trim() })
+      })
+      const d = await res.json()
+      if (res.ok) {
+        setTotpEnabled(true)
+        setTotpSetup(null)
+        setTotpCode('')
+        setTotpMsg({ ok: true, text: 'Two-factor authentication enabled.' })
+        // Update stored token
+        if (d.token) {
+          localStorage.setItem('token', d.token)
+        }
+      } else {
+        setTotpMsg({ ok: false, text: d.error || 'Invalid code. Try again.' })
+        setTotpCode('')
+      }
+    } catch { setTotpMsg({ ok: false, text: 'Something went wrong.' }) }
+    setTotpWorking(false)
+  }
+
+  async function handle2faDisable() {
+    if (!window.confirm('Disable two-factor authentication? You will not be prompted for a code on next sign in.')) return
+    setTotpWorking(true)
+    setTotpMsg(null)
+    try {
+      const res = await apiFetch('/api/auth/2fa/disable', { method: 'POST', body: JSON.stringify({}) })
+      const d = await res.json()
+      if (res.ok) { setTotpEnabled(false); setTotpSetup(null); setTotpMsg({ ok: true, text: '2FA disabled.' }) }
+      else setTotpMsg({ ok: false, text: d.error || 'Failed to disable 2FA.' })
+    } catch { setTotpMsg({ ok: false, text: 'Something went wrong.' }) }
+    setTotpWorking(false)
   }
 
   useEffect(() => {
@@ -304,6 +400,179 @@ export default function Settings() {
                 <div className={styles.linkDesc}>Manage reply templates</div>
               </div>
             </a>
+            <a href="/settings/custom-fields" className={styles.linkCard}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+              <div>
+                <div className={styles.linkTitle}>Custom Fields</div>
+                <div className={styles.linkDesc}>Add custom fields to tickets</div>
+              </div>
+            </a>
+          </div>
+        </section>
+
+        {/* ── 2FA / Security ───────────────────────── */}
+        <section className={styles.section}>
+          <div className={styles.sectionHead}>
+            <div>
+              <h2 className={styles.sectionTitle}>Two-Factor Authentication</h2>
+              <p className={styles.sectionDesc}>
+                Add a second layer of security to your account. When enabled, you will need to enter
+                a 6-digit code from your authenticator app each time you sign in.
+              </p>
+            </div>
+            {!totpLoading && (
+              <span className={totpEnabled ? styles.badgeOn : styles.badgeOff}>
+                {totpEnabled ? '● Enabled' : '○ Disabled'}
+              </span>
+            )}
+          </div>
+          <div className={styles.card}>
+            {totpLoading ? (
+              <p className={styles.msgWarn}>Loading…</p>
+            ) : totpEnabled ? (
+              <>
+                <p style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary)' }}>
+                  Two-factor authentication is active on your account.
+                </p>
+                {totpMsg && <p className={totpMsg.ok ? styles.msgOk : styles.msgErr}>{totpMsg.ok ? '✓ ' : '✕ '}{totpMsg.text}</p>}
+                <div>
+                  <button className={formStyles.btnSecondary} onClick={handle2faDisable} disabled={totpWorking}>
+                    {totpWorking ? 'Disabling…' : 'Disable 2FA'}
+                  </button>
+                </div>
+              </>
+            ) : totpSetup ? (
+              <form onSubmit={handle2faVerify} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <p style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                  Scan the QR code below with your authenticator app (Google Authenticator, Authy, etc.),
+                  then enter the 6-digit code it shows to confirm.
+                </p>
+                <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                  <img src={totpSetup.qrCodeUrl} alt="2FA QR code" width={160} height={160} style={{ border: '1px solid var(--border)', borderRadius: 8 }} />
+                  <div style={{ flex: 1 }}>
+                    <p style={{ margin: '0 0 6px', fontSize: 12, color: 'var(--text-secondary)' }}>Manual entry key:</p>
+                    <code style={{ fontSize: 13, background: '#F5F5F2', padding: '6px 10px', borderRadius: 6, display: 'block', wordBreak: 'break-all', letterSpacing: 2 }}>
+                      {totpSetup.secret}
+                    </code>
+                  </div>
+                </div>
+                <div className={formStyles.field}>
+                  <label className={formStyles.label}>Confirm with code from your app</label>
+                  <input
+                    className={formStyles.input}
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={6}
+                    placeholder="000000"
+                    value={totpCode}
+                    onChange={e => setTotpCode(e.target.value.replace(/\D/g, ''))}
+                    autoFocus
+                    autoComplete="one-time-code"
+                    style={{ maxWidth: 160, letterSpacing: 4, textAlign: 'center', fontFamily: 'monospace', fontSize: 18 }}
+                  />
+                </div>
+                {totpMsg && <p className={totpMsg.ok ? styles.msgOk : styles.msgErr}>{totpMsg.ok ? '✓ ' : '✕ '}{totpMsg.text}</p>}
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <button type="submit" className={formStyles.btnPrimary} disabled={totpWorking || totpCode.length < 6}>
+                    {totpWorking ? 'Verifying…' : 'Enable 2FA'}
+                  </button>
+                  <button type="button" className={formStyles.btnSecondary} onClick={() => { setTotpSetup(null); setTotpMsg(null) }}>
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <>
+                <p style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary)' }}>
+                  Two-factor authentication is not enabled on your account.
+                </p>
+                {totpMsg && <p className={totpMsg.ok ? styles.msgOk : styles.msgErr}>{totpMsg.ok ? '✓ ' : '✕ '}{totpMsg.text}</p>}
+                <div>
+                  <button className={formStyles.btnPrimary} onClick={handle2faSetup} disabled={totpWorking}>
+                    {totpWorking ? 'Setting up…' : 'Enable 2FA'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </section>
+
+        {/* ── Audit Log ─────────────────────────────── */}
+        <section className={styles.section}>
+          <div className={styles.sectionHead}>
+            <div>
+              <h2 className={styles.sectionTitle}>Audit Log</h2>
+              <p className={styles.sectionDesc}>
+                A record of all significant actions taken in the system — status changes, deletions, agent management, and more.
+              </p>
+            </div>
+          </div>
+
+          <div className={styles.card} style={{ padding: '16px 20px', gap: 12 }}>
+            {/* Filter bar */}
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+              <select
+                className={formStyles.select}
+                style={{ maxWidth: 180 }}
+                value={auditFilter}
+                onChange={e => setAuditFilter(e.target.value)}
+              >
+                <option value="">All entity types</option>
+                <option value="ticket">Tickets</option>
+                <option value="contact">Contacts</option>
+                <option value="agent">Agents</option>
+              </select>
+            </div>
+
+            {auditLoading ? (
+              <p className={styles.msgWarn}>Loading…</p>
+            ) : (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid var(--border)', textAlign: 'left' }}>
+                      <th style={{ padding: '6px 10px', color: 'var(--text-secondary)', fontWeight: 600 }}>Time</th>
+                      <th style={{ padding: '6px 10px', color: 'var(--text-secondary)', fontWeight: 600 }}>Agent</th>
+                      <th style={{ padding: '6px 10px', color: 'var(--text-secondary)', fontWeight: 600 }}>Action</th>
+                      <th style={{ padding: '6px 10px', color: 'var(--text-secondary)', fontWeight: 600 }}>Entity</th>
+                      <th style={{ padding: '6px 10px', color: 'var(--text-secondary)', fontWeight: 600 }}>Changes</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {auditRows
+                      .filter(r => !auditFilter || r.entity_type === auditFilter)
+                      .map(row => (
+                        <tr key={row.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                          <td style={{ padding: '6px 10px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                            {new Date(row.created_at).toLocaleString()}
+                          </td>
+                          <td style={{ padding: '6px 10px' }}>{row.agent_name}</td>
+                          <td style={{ padding: '6px 10px' }}>
+                            <span style={{ background: '#F1F5F9', borderRadius: 4, padding: '2px 6px', fontSize: 12 }}>
+                              {ACTION_LABELS[row.action] || row.action}
+                            </span>
+                          </td>
+                          <td style={{ padding: '6px 10px', color: 'var(--text-secondary)' }}>
+                            {ENTITY_LABELS[row.entity_type] || row.entity_type}
+                            {row.entity_id ? ` #${row.entity_id}` : ''}
+                          </td>
+                          <td style={{ padding: '6px 10px', color: 'var(--text-secondary)', fontSize: 12, maxWidth: 280 }}>
+                            <AuditChanges old_value={row.old_value} new_value={row.new_value} />
+                          </td>
+                        </tr>
+                      ))}
+                    {auditRows.filter(r => !auditFilter || r.entity_type === auditFilter).length === 0 && (
+                      <tr>
+                        <td colSpan={5} style={{ padding: '20px 10px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                          No audit log entries yet.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </section>
 
@@ -799,5 +1068,35 @@ export default function Settings() {
 
       </div>
     </div>
+  )
+}
+
+function AuditChanges({ old_value, new_value }) {
+  const oldObj = old_value ? (typeof old_value === 'string' ? JSON.parse(old_value) : old_value) : null
+  const newObj = new_value ? (typeof new_value === 'string' ? JSON.parse(new_value) : new_value) : null
+
+  if (!oldObj && !newObj) return <span style={{ color: 'var(--text-muted)' }}>—</span>
+
+  const keys = Array.from(new Set([
+    ...Object.keys(oldObj || {}),
+    ...Object.keys(newObj || {}),
+  ]))
+
+  return (
+    <span>
+      {keys.map(k => {
+        const o = oldObj?.[k]
+        const n = newObj?.[k]
+        if (o === n) return null
+        return (
+          <span key={k} style={{ display: 'block' }}>
+            <strong>{k}:</strong>{' '}
+            {o != null && <span style={{ textDecoration: 'line-through', opacity: 0.6 }}>{String(o)}</span>}
+            {o != null && n != null && ' → '}
+            {n != null && <span>{String(n)}</span>}
+          </span>
+        )
+      })}
+    </span>
   )
 }

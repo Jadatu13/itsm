@@ -232,4 +232,176 @@ function inlineEmailStyles(html) {
     .replace(/<a /g, '<a style="color:#4F7FFF;text-decoration:underline;" ');
 }
 
-module.exports = { sendNewTicket, sendAgentReply, sendTicketResolved };
+// ─── Agent notification helpers ───────────────────────────────────────────────
+
+function agentViewButton(ticketId) {
+  const url = `${APP_URL}/tickets/${encodeURIComponent(ticketId)}`;
+  return `
+    <div style="text-align:center;margin:24px 0 4px;">
+      <a href="${url}" style="display:inline-block;background:#1f2937;color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;padding:11px 28px;border-radius:7px;">View Ticket</a>
+    </div>`;
+}
+
+/**
+ * Send an internal agent notification email.
+ *
+ * @param {object} opts
+ * @param {string} opts.to           - recipient email address
+ * @param {string} opts.agentName    - agent's display name
+ * @param {string} opts.event        - short event title, e.g. "New ticket assigned to you"
+ * @param {string} opts.reference    - ticket reference, e.g. TKT-0042
+ * @param {number} opts.ticketId     - numeric ticket id (for link)
+ * @param {string} opts.ticketSubject
+ * @param {string} opts.contactName
+ * @param {string} [opts.previewText] - optional snippet of the relevant message body
+ */
+async function sendAgentNotification({ to, agentName, event, reference, ticketId, ticketSubject, contactName, previewText }) {
+  const previewHtml = previewText
+    ? `<div style="background:#f3f4f6;border-left:3px solid #6b7280;padding:10px 14px;border-radius:0 6px 6px 0;margin-bottom:20px;font-size:13px;color:#374151;line-height:1.55;white-space:pre-wrap;">${esc(previewText.slice(0, 400))}${previewText.length > 400 ? '…' : ''}</div>`
+    : '';
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:32px 16px;background:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <div style="max-width:560px;margin:0 auto;background:#ffffff;border:1px solid #d1d5db;border-radius:10px;overflow:hidden;">
+    <div style="background:#1f2937;padding:24px 32px;">
+      <div style="color:#ffffff;font-size:17px;font-weight:700;">${esc(event)}</div>
+      <div style="color:rgba(255,255,255,0.6);font-size:12px;margin-top:5px;font-family:'SF Mono','Fira Mono',monospace;">${esc(reference)}</div>
+    </div>
+    <div style="padding:28px 32px;">
+      <p style="margin:0 0 16px;color:#374151;font-size:15px;">Hi ${esc(agentName)},</p>
+      <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:14px 18px;margin-bottom:20px;">
+        <div style="font-size:11px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">Subject</div>
+        <div style="font-size:14px;color:#111827;font-weight:600;">${esc(ticketSubject)}</div>
+        <div style="font-size:11px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.05em;margin:10px 0 6px;">Contact</div>
+        <div style="font-size:14px;color:#374151;">${esc(contactName)}</div>
+      </div>
+      ${previewHtml}
+      ${agentViewButton(ticketId)}
+    </div>
+    <div style="background:#f9fafb;border-top:1px solid #e5e7eb;padding:14px 32px;">
+      <p style="margin:0;color:#9ca3af;font-size:12px;">This is an internal agent notification — do not reply directly.</p>
+    </div>
+  </div>
+</body>
+</html>`;
+
+  const text = [
+    `Hi ${agentName},`,
+    '',
+    event,
+    '',
+    `Ticket: ${reference}`,
+    `Subject: ${ticketSubject}`,
+    `Contact: ${contactName}`,
+    previewText ? `\n${previewText.slice(0, 400)}` : '',
+    '',
+    `View ticket: ${APP_URL}/tickets/${ticketId}`,
+  ].join('\n');
+
+  await sendMail({ to, subject: `[${reference}] ${event}`, html, text });
+}
+
+/**
+ * Send an SLA breach alert to an agent.
+ */
+async function sendSlaBreachAlert({ to, agentName, reference, ticketId, ticketSubject, contactName, slaBreachedAt }) {
+  const breachTime = slaBreachedAt
+    ? new Date(slaBreachedAt).toLocaleString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+    : 'unknown';
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:32px 16px;background:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <div style="max-width:560px;margin:0 auto;background:#ffffff;border:1px solid #d1d5db;border-radius:10px;overflow:hidden;">
+    <div style="background:#1f2937;padding:24px 32px;">
+      <div style="color:#fbbf24;font-size:17px;font-weight:700;">SLA Breach — Immediate attention required</div>
+      <div style="color:rgba(255,255,255,0.6);font-size:12px;margin-top:5px;font-family:'SF Mono','Fira Mono',monospace;">${esc(reference)}</div>
+    </div>
+    <div style="padding:28px 32px;">
+      <p style="margin:0 0 16px;color:#374151;font-size:15px;">Hi ${esc(agentName)},</p>
+      <p style="margin:0 0 20px;color:#6b7280;font-size:14px;line-height:1.6;">
+        The following ticket has breached its SLA and requires your immediate attention.
+      </p>
+      <div style="background:#fef3c7;border:1px solid #fde68a;border-radius:8px;padding:14px 18px;margin-bottom:20px;">
+        <div style="font-size:11px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">Subject</div>
+        <div style="font-size:14px;color:#111827;font-weight:600;">${esc(ticketSubject)}</div>
+        <div style="font-size:11px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:0.05em;margin:10px 0 6px;">Contact</div>
+        <div style="font-size:14px;color:#374151;">${esc(contactName)}</div>
+        <div style="font-size:11px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:0.05em;margin:10px 0 6px;">SLA Due</div>
+        <div style="font-size:14px;color:#b45309;font-weight:600;">${esc(breachTime)}</div>
+      </div>
+      ${agentViewButton(ticketId)}
+    </div>
+    <div style="background:#f9fafb;border-top:1px solid #e5e7eb;padding:14px 32px;">
+      <p style="margin:0;color:#9ca3af;font-size:12px;">This is an automated SLA breach alert.</p>
+    </div>
+  </div>
+</body>
+</html>`;
+
+  const text = [
+    `Hi ${agentName},`,
+    '',
+    `SLA BREACH — ${reference}`,
+    '',
+    `Subject: ${ticketSubject}`,
+    `Contact: ${contactName}`,
+    `SLA Due: ${breachTime}`,
+    '',
+    `View ticket: ${APP_URL}/tickets/${ticketId}`,
+  ].join('\n');
+
+  await sendMail({ to, subject: `[SLA BREACH] [${reference}] ${ticketSubject}`, html, text });
+}
+
+/**
+ * Send an @mention notification to an agent.
+ */
+async function sendMentionNotification({ to, mentionedAgentName, authorName, reference, ticketId, ticketSubject, notePreview }) {
+  const previewHtml = notePreview
+    ? `<div style="background:#f3f4f6;border-left:3px solid #6b7280;padding:10px 14px;border-radius:0 6px 6px 0;margin-bottom:20px;font-size:13px;color:#374151;line-height:1.55;white-space:pre-wrap;">${esc(notePreview.slice(0, 400))}${notePreview.length > 400 ? '…' : ''}</div>`
+    : '';
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:32px 16px;background:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <div style="max-width:560px;margin:0 auto;background:#ffffff;border:1px solid #d1d5db;border-radius:10px;overflow:hidden;">
+    <div style="background:#1f2937;padding:24px 32px;">
+      <div style="color:#ffffff;font-size:17px;font-weight:700;">You were mentioned in an internal note</div>
+      <div style="color:rgba(255,255,255,0.6);font-size:12px;margin-top:5px;font-family:'SF Mono','Fira Mono',monospace;">${esc(reference)}</div>
+    </div>
+    <div style="padding:28px 32px;">
+      <p style="margin:0 0 16px;color:#374151;font-size:15px;">Hi ${esc(mentionedAgentName)},</p>
+      <p style="margin:0 0 20px;color:#6b7280;font-size:14px;line-height:1.6;">
+        <strong style="color:#374151;">${esc(authorName)}</strong> mentioned you in an internal note on ticket
+        <strong style="color:#374151;">${esc(ticketSubject)}</strong>.
+      </p>
+      ${previewHtml}
+      ${agentViewButton(ticketId)}
+    </div>
+    <div style="background:#f9fafb;border-top:1px solid #e5e7eb;padding:14px 32px;">
+      <p style="margin:0;color:#9ca3af;font-size:12px;">This is an internal agent notification — do not reply directly.</p>
+    </div>
+  </div>
+</body>
+</html>`;
+
+  const text = [
+    `Hi ${mentionedAgentName},`,
+    '',
+    `${authorName} mentioned you in an internal note on ticket ${reference}.`,
+    '',
+    `Subject: ${ticketSubject}`,
+    notePreview ? `\nNote:\n${notePreview.slice(0, 400)}` : '',
+    '',
+    `View ticket: ${APP_URL}/tickets/${ticketId}`,
+  ].join('\n');
+
+  await sendMail({ to, subject: `[${reference}] You were mentioned in an internal note`, html, text });
+}
+
+module.exports = { sendNewTicket, sendAgentReply, sendTicketResolved, sendAgentNotification, sendSlaBreachAlert, sendMentionNotification };

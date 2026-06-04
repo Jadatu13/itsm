@@ -657,3 +657,170 @@
 }
 .attachmentLink:hover { text-decoration: underline; }
 .attachmentSize { color: #9ca3af; font-size: 11px; }
+
+/* ── Panel section header (Custom Fields, Time Tracking) ──────────────────── */
+.panelSectionHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.panelSectionTitle {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  flex: 1;
+}
+
+.panelSaveBtn {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.panelSaveBtn:hover:not(:disabled) { background: var(--accent-hover); }
+.panelSaveBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── Custom field rows ────────────────────────────────────────────────────── */
+.customFieldRow {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.customFieldInput {
+  width: 100%;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 13px;
+  background: var(--white);
+  color: var(--text-primary);
+  font-family: inherit;
+  box-sizing: border-box;
+}
+.customFieldInput:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(79,127,255,0.1);
+}
+
+.customFieldCheck {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: var(--accent);
+}
+
+/* ── Time tracking panel ──────────────────────────────────────────────────── */
+.timeTotal {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.logTimeBtn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 3px 9px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.12s;
+  white-space: nowrap;
+}
+.logTimeBtn:hover { background: var(--bg); color: var(--text-primary); }
+
+.logTimeForm {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 0 2px;
+}
+
+.logTimeInput {
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 13px;
+  background: var(--white);
+  color: var(--text-primary);
+  font-family: inherit;
+  box-sizing: border-box;
+}
+.logTimeInput:focus { outline: none; border-color: var(--accent); }
+
+.logTimeErr { font-size: 12px; color: var(--priority-high); }
+
+.logTimeSave {
+  align-self: flex-end;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.logTimeSave:hover:not(:disabled) { background: var(--accent-hover); }
+.logTimeSave:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.timeEmpty {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  padding: 4px 0;
+}
+
+.timeEntry {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 5px 0;
+  border-bottom: 1px solid #f3f3ee;
+  flex-wrap: wrap;
+}
+.timeEntry:last-child { border-bottom: none; }
+
+.timeEntryMins {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent);
+  min-width: 36px;
+  flex-shrink: 0;
+}
+
+.timeEntryAgent {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.timeEntryNote {
+  font-size: 12.5px;
+  color: var(--text-primary);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.timeEntryDate {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}

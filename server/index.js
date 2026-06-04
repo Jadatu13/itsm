@@ -22,7 +22,11 @@ const tenantRoutes        = require('./routes/tenants');
 const aiRoutes            = require('./routes/ai');
 const notificationRoutes  = require('./routes/notifications');
 const attachmentRoutes    = require('./routes/attachments');
+const searchRoutes        = require('./routes/search');
+const customFieldsRoutes  = require('./routes/custom-fields');
+const auditRoutes         = require('./routes/audit');
 const { startPoller }     = require('./inbound');
+const { startSlaMonitor } = require('./jobs/slaMonitor');
 
 const app  = express();
 const PORT = process.env.PORT || 3001;
@@ -50,6 +54,9 @@ app.use('/api/tenants',         requireAuth, tenantRoutes);
 app.use('/api/ai',              requireAuth, aiRoutes);
 app.use('/api/notifications',   requireAuth, notificationRoutes);
 app.use('/api/attachments',     requireAuth, attachmentRoutes);
+app.use('/api/search',          requireAuth, searchRoutes);
+app.use('/api/custom-fields',   requireAuth, customFieldsRoutes);
+app.use('/api/audit',           requireAuth, auditRoutes);
 
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 app.get('/api/dashboard/stats', requireAuth, async (req, res) => {
@@ -281,6 +288,63 @@ app.listen(PORT, async () => {
       )
     `);
 
+    // SLA breach alert flag
+    await db.query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS sla_alerted BOOLEAN DEFAULT false`);
+
+    // Custom ticket fields
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS ticket_custom_fields (
+        id SERIAL PRIMARY KEY,
+        label TEXT NOT NULL,
+        field_key TEXT NOT NULL UNIQUE,
+        field_type TEXT NOT NULL DEFAULT 'text',
+        options JSONB DEFAULT '[]',
+        required BOOLEAN DEFAULT false,
+        sort_order INT DEFAULT 0,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS ticket_field_values (
+        ticket_id INT REFERENCES tickets(id) ON DELETE CASCADE,
+        field_key TEXT NOT NULL,
+        value TEXT,
+        PRIMARY KEY (ticket_id, field_key)
+      )
+    `);
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS ticket_time_entries (
+        id SERIAL PRIMARY KEY,
+        ticket_id INT REFERENCES tickets(id) ON DELETE CASCADE,
+        agent_id  INT REFERENCES agents(id) ON DELETE SET NULL,
+        minutes   INT NOT NULL,
+        note      TEXT,
+        logged_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    // Audit log
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS audit_log (
+        id          BIGSERIAL PRIMARY KEY,
+        agent_id    INT REFERENCES agents(id) ON DELETE SET NULL,
+        agent_name  TEXT,
+        action      TEXT NOT NULL,
+        entity_type TEXT,
+        entity_id   INT,
+        old_value   JSONB,
+        new_value   JSONB,
+        ip_address  TEXT,
+        created_at  TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await db.query(`CREATE INDEX IF NOT EXISTS audit_log_entity ON audit_log(entity_type, entity_id)`);
+    await db.query(`CREATE INDEX IF NOT EXISTS audit_log_created ON audit_log(created_at DESC)`);
+
+    // Agent 2FA
+    await db.query(`ALTER TABLE agents ADD COLUMN IF NOT EXISTS totp_secret TEXT`);
+    await db.query(`ALTER TABLE agents ADD COLUMN IF NOT EXISTS totp_enabled BOOLEAN DEFAULT false`);
+
     console.log('[db] Migrations applied');
   } catch (err) {
     console.error('[db] Migration error:', err.message);
@@ -316,4 +380,5 @@ app.listen(PORT, async () => {
   }
 
   startPoller();
+  startSlaMonitor();
 });

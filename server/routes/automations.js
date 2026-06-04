@@ -1,6 +1,7 @@
-const express = require('express');
-const router = express.Router();
-const db = require('../db');
+const express      = require('express');
+const router       = express.Router();
+const db           = require('../db');
+const requireAdmin = require('../middleware/requireAdmin');
 
 // GET /api/automations
 router.get('/', async (req, res) => {
@@ -15,8 +16,8 @@ router.get('/', async (req, res) => {
   }
 });
 
-// POST /api/automations
-router.post('/', async (req, res) => {
+// POST /api/automations — admin only
+router.post('/', requireAdmin, async (req, res) => {
   const { name, trigger_type, match_all, conditions, actions } = req.body;
   if (!name || !trigger_type) {
     return res.status(400).json({ error: 'name and trigger_type are required' });
@@ -41,8 +42,8 @@ router.post('/', async (req, res) => {
   }
 });
 
-// PUT /api/automations/:id
-router.put('/:id', async (req, res) => {
+// PUT /api/automations/:id — admin only
+router.put('/:id', requireAdmin, async (req, res) => {
   const { name, trigger_type, match_all, conditions, actions, enabled } = req.body;
   if (!name || !trigger_type) {
     return res.status(400).json({ error: 'name and trigger_type are required' });
@@ -74,8 +75,8 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// DELETE /api/automations/:id
-router.delete('/:id', async (req, res) => {
+// DELETE /api/automations/:id — admin only
+router.delete('/:id', requireAdmin, async (req, res) => {
   try {
     const result = await db.query(
       `DELETE FROM automations WHERE id = $1 RETURNING id`,
@@ -89,8 +90,8 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
-// PATCH /api/automations/:id/toggle
-router.patch('/:id/toggle', async (req, res) => {
+// PATCH /api/automations/:id/toggle — admin only
+router.patch('/:id/toggle', requireAdmin, async (req, res) => {
   try {
     const result = await db.query(
       `UPDATE automations SET enabled = NOT enabled, updated_at = NOW()

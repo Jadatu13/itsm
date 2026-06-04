@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useEffect, useState, useRef, useCallback, Fragment } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import PageHeader from '../components/PageHeader'
 import { StatusBadge, PriorityBadge, CategoryBadge, SourceBadge, CATEGORY_OPTIONS, SOURCE_OPTIONS } from '../components/Badge'
@@ -363,6 +363,12 @@ export default function TicketDetail() {
               <span className={styles.panelValue}>{formatDate(ticket.updated_at)}</span>
             </div>
           </div>
+
+          {/* ── Custom Fields panel ──────────────────────────────────────────── */}
+          <CustomFieldsPanel ticketId={id} />
+
+          {/* ── Time Tracking panel ──────────────────────────────────────────── */}
+          <TimeTrackingPanel ticketId={id} />
         </div>
       </div>
 
@@ -564,6 +570,226 @@ function KBPicker({ items, onSelect, onClose }) {
         </div>
       </div>
     </Modal>
+  )
+}
+
+// ─── Custom Fields panel ──────────────────────────────────────────────────────
+
+function CustomFieldsPanel({ ticketId }) {
+  const [fields, setFields]     = useState([])   // field definitions
+  const [values, setValues]     = useState({})   // { field_key: value }
+  const [dirty, setDirty]       = useState({})   // { field_key: true } — which fields have unsaved edits
+  const [saving, setSaving]     = useState(false)
+  const [msg, setMsg]           = useState(null)
+
+  useEffect(() => {
+    apiFetch('/api/custom-fields')
+      .then(r => r.json())
+      .then(d => { if (Array.isArray(d)) setFields(d) })
+      .catch(() => {})
+
+    apiFetch(`/api/tickets/${ticketId}/custom-fields`)
+      .then(r => r.json())
+      .then(d => {
+        if (Array.isArray(d)) {
+          const v = {}
+          d.forEach(row => { v[row.field_key] = row.value ?? '' })
+          setValues(v)
+        }
+      })
+      .catch(() => {})
+  }, [ticketId])
+
+  function handleChange(key, val) {
+    setValues(prev => ({ ...prev, [key]: val }))
+    setDirty(prev => ({ ...prev, [key]: true }))
+    setMsg(null)
+  }
+
+  async function handleSave() {
+    const payload = {}
+    Object.keys(dirty).forEach(k => { payload[k] = values[k] })
+    if (!Object.keys(payload).length) return
+    setSaving(true)
+    setMsg(null)
+    try {
+      const res = await apiFetch(`/api/tickets/${ticketId}/custom-fields`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      if (res.ok) {
+        setDirty({})
+        setMsg({ ok: true, text: 'Saved.' })
+      } else {
+        setMsg({ ok: false, text: 'Failed to save.' })
+      }
+    } catch {
+      setMsg({ ok: false, text: 'Something went wrong.' })
+    }
+    setSaving(false)
+  }
+
+  if (!fields.length) return null
+
+  const hasDirty = Object.keys(dirty).length > 0
+
+  return (
+    <div className={styles.panel} style={{ marginTop: 12 }}>
+      <div className={styles.panelSectionHead}>
+        <span className={styles.panelSectionTitle}>Custom Fields</span>
+        {hasDirty && (
+          <button className={styles.panelSaveBtn} onClick={handleSave} disabled={saving}>
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+        )}
+      </div>
+      {fields.map(field => (
+        <div key={field.field_key} className={styles.customFieldRow}>
+          <span className={styles.panelLabel}>{field.label}{field.required && <span style={{ color: 'var(--priority-high)' }}> *</span>}</span>
+          <CustomFieldInput
+            field={field}
+            value={values[field.field_key] ?? ''}
+            onChange={val => handleChange(field.field_key, val)}
+          />
+        </div>
+      ))}
+      {msg && (
+        <span style={{ fontSize: 12, color: msg.ok ? '#15803d' : 'var(--priority-high)' }}>
+          {msg.ok ? '✓ ' : '✕ '}{msg.text}
+        </span>
+      )}
+    </div>
+  )
+}
+
+function CustomFieldInput({ field, value, onChange }) {
+  const cls = styles.customFieldInput
+  if (field.field_type === 'checkbox') {
+    return (
+      <input
+        type="checkbox"
+        checked={value === 'true' || value === true}
+        onChange={e => onChange(e.target.checked ? 'true' : 'false')}
+        className={styles.customFieldCheck}
+      />
+    )
+  }
+  if (field.field_type === 'select') {
+    const opts = Array.isArray(field.options) ? field.options : []
+    return (
+      <select className={cls} value={value} onChange={e => onChange(e.target.value)}>
+        <option value="">— Select —</option>
+        {opts.map(o => <option key={o} value={o}>{o}</option>)}
+      </select>
+    )
+  }
+  if (field.field_type === 'date') {
+    return <input type="date" className={cls} value={value} onChange={e => onChange(e.target.value)} />
+  }
+  if (field.field_type === 'number') {
+    return <input type="number" className={cls} value={value} onChange={e => onChange(e.target.value)} />
+  }
+  return <input type="text" className={cls} value={value} onChange={e => onChange(e.target.value)} />
+}
+
+// ─── Time Tracking panel ──────────────────────────────────────────────────────
+
+function TimeTrackingPanel({ ticketId }) {
+  const [data, setData]       = useState({ entries: [], total_minutes: 0 })
+  const [showForm, setShowForm] = useState(false)
+  const [minutes, setMinutes]  = useState('')
+  const [note, setNote]        = useState('')
+  const [logging, setLogging]  = useState(false)
+  const [err, setErr]          = useState(null)
+
+  function load() {
+    apiFetch(`/api/tickets/${ticketId}/time`)
+      .then(r => r.json())
+      .then(d => { if (d.entries) setData(d) })
+      .catch(() => {})
+  }
+
+  useEffect(() => { load() }, [ticketId])
+
+  async function handleLog(e) {
+    e.preventDefault()
+    const mins = parseInt(minutes)
+    if (!mins || mins < 1) { setErr('Enter a positive number of minutes.'); return }
+    setLogging(true)
+    setErr(null)
+    try {
+      const res = await apiFetch(`/api/tickets/${ticketId}/time`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ minutes: mins, note: note.trim() || null }),
+      })
+      if (!res.ok) { const d = await res.json(); setErr(d.error || 'Failed'); setLogging(false); return }
+      setMinutes('')
+      setNote('')
+      setShowForm(false)
+      load()
+    } catch {
+      setErr('Something went wrong.')
+    }
+    setLogging(false)
+  }
+
+  function fmtMins(m) {
+    if (!m) return '0m'
+    const h = Math.floor(m / 60)
+    const rem = m % 60
+    return h > 0 ? `${h}h ${rem}m` : `${rem}m`
+  }
+
+  return (
+    <div className={styles.panel} style={{ marginTop: 12 }}>
+      <div className={styles.panelSectionHead}>
+        <span className={styles.panelSectionTitle}>Time Logged</span>
+        <span className={styles.timeTotal}>{fmtMins(data.total_minutes)}</span>
+        <button className={styles.logTimeBtn} onClick={() => setShowForm(v => !v)}>
+          {showForm ? 'Cancel' : '+ Log Time'}
+        </button>
+      </div>
+
+      {showForm && (
+        <form className={styles.logTimeForm} onSubmit={handleLog}>
+          <input
+            type="number"
+            className={styles.logTimeInput}
+            placeholder="Minutes"
+            min="1"
+            value={minutes}
+            onChange={e => setMinutes(e.target.value)}
+            autoFocus
+          />
+          <input
+            type="text"
+            className={styles.logTimeInput}
+            placeholder="Note (optional)"
+            value={note}
+            onChange={e => setNote(e.target.value)}
+          />
+          {err && <span className={styles.logTimeErr}>{err}</span>}
+          <button type="submit" className={styles.logTimeSave} disabled={logging}>
+            {logging ? 'Saving…' : 'Save'}
+          </button>
+        </form>
+      )}
+
+      {data.entries.length === 0 && !showForm && (
+        <div className={styles.timeEmpty}>No time logged yet.</div>
+      )}
+
+      {data.entries.map(entry => (
+        <div key={entry.id} className={styles.timeEntry}>
+          <span className={styles.timeEntryMins}>{fmtMins(entry.minutes)}</span>
+          <span className={styles.timeEntryAgent}>{entry.agent_name || 'Unknown'}</span>
+          {entry.note && <span className={styles.timeEntryNote}>{entry.note}</span>}
+          <span className={styles.timeEntryDate}>{formatDate(entry.logged_at)}</span>
+        </div>
+      ))}
+    </div>
   )
 }
 

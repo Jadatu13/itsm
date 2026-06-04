@@ -11,8 +11,27 @@ const fs              = require('fs');
 const path            = require('path');
 const db              = require('./db');
 const { decrypt }     = require('./lib/crypto');
-const { sendNewTicket } = require('./email');
+const { sendNewTicket, sendAgentNotification } = require('./email');
 const { runAutomations } = require('./automations');
+
+// ─── Notification helpers ─────────────────────────────────────────────────────
+
+async function agentEmailEnabled() {
+  try {
+    const r = await db.query(`SELECT value FROM settings WHERE key = 'notifications_agent_email'`);
+    if (!r.rows.length) return true;
+    return r.rows[0].value !== 'false';
+  } catch { return true; }
+}
+
+async function getRecipients(assignedTo) {
+  if (assignedTo) {
+    const r = await db.query('SELECT name, email FROM agents WHERE id = $1', [assignedTo]);
+    return r.rows.length ? [{ name: r.rows[0].name, email: r.rows[0].email }] : [];
+  }
+  const r = await db.query(`SELECT name, email FROM agents WHERE role = 'admin' AND email IS NOT NULL`);
+  return r.rows.map(a => ({ name: a.name, email: a.email }));
+}
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -169,6 +188,32 @@ async function processMessage(parsed) {
       db.query('SELECT * FROM tickets WHERE id=$1', [ticketId]).then(r => {
         if (r.rows[0]) runAutomations(r.rows[0], 'reply_received', { db }).catch(e => console.error('[automation]', e));
       });
+      // Notify assigned agent of contact reply
+      agentEmailEnabled().then(async enabled => {
+        if (!enabled) return;
+        const info = await db.query(
+          `SELECT t.reference, t.subject, t.assigned_to, t.id,
+                  c.first_name || ' ' || c.last_name AS contact_name
+           FROM tickets t JOIN contacts c ON c.id = t.contact_id WHERE t.id = $1`,
+          [ticketId]
+        );
+        if (!info.rows.length) return;
+        const { reference: tRef, subject, assigned_to, id: tId, contact_name } = info.rows[0];
+        const recipients = await getRecipients(assigned_to);
+        const plainPreview = (htmlBody || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+        for (const rec of recipients) {
+          sendAgentNotification({
+            to:            rec.email,
+            agentName:     rec.name,
+            event:         'New reply from contact',
+            reference:     tRef,
+            ticketId:      tId,
+            ticketSubject: subject,
+            contactName:   contact_name,
+            previewText:   plainPreview,
+          }).catch(e => console.error('[notify] inbound reply:', e.message));
+        }
+      }).catch(e => console.error('[notify] inbound reply setting:', e.message));
       return;
     }
     // Reference not found — fall through and create a new ticket
@@ -245,6 +290,24 @@ async function processMessage(parsed) {
     db.query('SELECT * FROM tickets WHERE id=$1', [ticketId]).then(r => {
       if (r.rows[0]) runAutomations(r.rows[0], 'ticket_created', { db }).catch(e => console.error('[automation]', e));
     });
+    // Notify agent(s) of new inbound ticket
+    agentEmailEnabled().then(async enabled => {
+      if (!enabled) return;
+      // New tickets from email are always unassigned initially
+      const recipients = await getRecipients(null);
+      for (const rec of recipients) {
+        sendAgentNotification({
+          to:            rec.email,
+          agentName:     rec.name,
+          event:         'New ticket created',
+          reference,
+          ticketId,
+          ticketSubject: subject,
+          contactName:   senderName || senderEmail,
+          previewText:   plainBody,
+        }).catch(e => console.error('[notify] inbound new ticket:', e.message));
+      }
+    }).catch(e => console.error('[notify] inbound new ticket setting:', e.message));
   }
 }
 

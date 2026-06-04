@@ -18,6 +18,7 @@ import ServiceCatalog from './pages/ServiceCatalog'
 import ApprovalQueue from './pages/ApprovalQueue'
 import M365Tenants from './pages/M365Tenants'
 import PortalBranding from './pages/PortalBranding'
+import CustomFields from './pages/CustomFields'
 import PortalLogin from './pages/portal/PortalLogin'
 import PortalApp from './pages/portal/PortalApp'
 import PortalDashboard from './pages/portal/PortalDashboard'
@@ -32,6 +33,14 @@ function ProtectedRoute({ children }) {
   const { agent, loading } = useAuth()
   if (loading) return <div style={{ padding: 40, color: '#888' }}>Loading…</div>
   if (!agent)  return <Navigate to="/login" replace />
+  return children
+}
+
+function AdminRoute({ children }) {
+  const { agent, loading } = useAuth()
+  if (loading) return <div style={{ padding: 40, color: '#888' }}>Loading…</div>
+  if (!agent)  return <Navigate to="/login" replace />
+  if (agent.role !== 'admin') return <Navigate to="/dashboard" replace />
   return children
 }
 
@@ -69,9 +78,10 @@ export default function App() {
             <Route path="/service-catalog" element={<ServiceCatalog />} />
             <Route path="/approval-queue"  element={<ApprovalQueue />} />
             <Route path="/m365-tenants"    element={<M365Tenants />} />
-            <Route path="/settings"      element={<Settings />} />
-            <Route path="/settings/agents"          element={<Agents />} />
-            <Route path="/settings/canned-responses" element={<CannedResponses />} />
+            <Route path="/settings"      element={<AdminRoute><Settings /></AdminRoute>} />
+            <Route path="/settings/agents"          element={<AdminRoute><Agents /></AdminRoute>} />
+            <Route path="/settings/canned-responses" element={<AdminRoute><CannedResponses /></AdminRoute>} />
+            <Route path="/settings/custom-fields"    element={<AdminRoute><CustomFields /></AdminRoute>} />
             <Route path="/portal-branding" element={<PortalBranding />} />
           </Route>
         </Routes>

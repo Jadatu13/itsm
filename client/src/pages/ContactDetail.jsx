@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import PageHeader from '../components/PageHeader'
 import { StatusBadge, PriorityBadge } from '../components/Badge'
 import Modal from '../components/Modal'
 import ConfirmModal from '../components/ConfirmModal'
-import { formatDate } from '../utils/format'
+import { formatDate, timeAgo } from '../utils/format'
 import { apiFetch } from '../utils/api'
 import formStyles from '../styles/forms.module.css'
 import styles from './ContactDetail.module.css'
@@ -17,6 +17,7 @@ export default function ContactDetail() {
   const [showEdit, setShowEdit] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [showMerge, setShowMerge] = useState(false)
+  const [activeTab, setActiveTab] = useState('overview')
   const navigate = useNavigate()
 
   function load() {
@@ -47,69 +48,89 @@ export default function ContactDetail() {
           </div>
         }
       />
+      {/* ── Tabs ── */}
+      <div className={styles.tabs}>
+        <button
+          className={`${styles.tab} ${activeTab === 'overview' ? styles.tabActive : ''}`}
+          onClick={() => setActiveTab('overview')}
+        >Overview</button>
+        <button
+          className={`${styles.tab} ${activeTab === 'activity' ? styles.tabActive : ''}`}
+          onClick={() => setActiveTab('activity')}
+        >Activity</button>
+      </div>
+
       <div className={styles.content}>
-        {/* ── Profile card ── */}
-        <div className={styles.card}>
-          <div className={styles.avatar}>{contact.first_name[0]}{contact.last_name[0]}</div>
-          <div className={styles.info}>
-            <div className={styles.fullName}>{contact.full_name}</div>
-            <div className={styles.email}>{contact.email}</div>
-            {contact.phone && (
-              <div className={styles.phone}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 1.24h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.85a16 16 0 0 0 5.33 5.33l.91-.91a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21 15.53l.02 1.39z"/>
-                </svg>
-                {contact.phone}
+        {activeTab === 'overview' && (
+          <>
+            {/* ── Profile card ── */}
+            <div className={styles.card}>
+              <div className={styles.avatar}>{contact.first_name[0]}{contact.last_name[0]}</div>
+              <div className={styles.info}>
+                <div className={styles.fullName}>{contact.full_name}</div>
+                <div className={styles.email}>{contact.email}</div>
+                {contact.phone && (
+                  <div className={styles.phone}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 1.24h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.85a16 16 0 0 0 5.33 5.33l.91-.91a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 21 15.53l.02 1.39z"/>
+                    </svg>
+                    {contact.phone}
+                  </div>
+                )}
+                {contact.organisation_name && (
+                  <div className={styles.org}>{contact.organisation_name}</div>
+                )}
+                <div className={styles.joined}>Member since {formatDate(contact.created_at)}</div>
+              </div>
+            </div>
+
+            {/* ── Notes ── */}
+            {contact.notes && (
+              <div className={styles.section}>
+                <h2 className={styles.sectionTitle}>Notes</h2>
+                <div className={styles.notesBox}>{contact.notes}</div>
               </div>
             )}
-            {contact.organisation_name && (
-              <div className={styles.org}>{contact.organisation_name}</div>
-            )}
-            <div className={styles.joined}>Member since {formatDate(contact.created_at)}</div>
-          </div>
-        </div>
 
-        {/* ── Notes ── */}
-        {contact.notes && (
-          <div className={styles.section}>
-            <h2 className={styles.sectionTitle}>Notes</h2>
-            <div className={styles.notesBox}>{contact.notes}</div>
-          </div>
+            {/* ── Ticket history ── */}
+            <div className={styles.section}>
+              <h2 className={styles.sectionTitle}>Tickets ({contact.tickets.length})</h2>
+              <div className={styles.tableWrap}>
+                <table className={styles.table}>
+                  <thead>
+                    <tr>
+                      <th>Reference</th>
+                      <th>Subject</th>
+                      <th>Status</th>
+                      <th>Priority</th>
+                      <th>Created</th>
+                      <th>Updated</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {contact.tickets.length === 0 && (
+                      <tr><td colSpan={6} className={styles.empty}>No tickets.</td></tr>
+                    )}
+                    {contact.tickets.map(t => (
+                      <tr key={t.id} className={styles.row} onClick={() => navigate(`/tickets/${t.id}`)}>
+                        <td className={styles.ref}>{t.reference}</td>
+                        <td className={styles.subject}>{t.subject}</td>
+                        <td><StatusBadge status={t.status} /></td>
+                        <td><PriorityBadge priority={t.priority} /></td>
+                        <td className={styles.muted}>{formatDate(t.created_at)}</td>
+                        <td className={styles.muted}>{formatDate(t.updated_at)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </>
         )}
 
-        {/* ── Ticket history ── */}
-        <div className={styles.section}>
-          <h2 className={styles.sectionTitle}>Tickets ({contact.tickets.length})</h2>
-          <div className={styles.tableWrap}>
-            <table className={styles.table}>
-              <thead>
-                <tr>
-                  <th>Reference</th>
-                  <th>Subject</th>
-                  <th>Status</th>
-                  <th>Priority</th>
-                  <th>Created</th>
-                  <th>Updated</th>
-                </tr>
-              </thead>
-              <tbody>
-                {contact.tickets.length === 0 && (
-                  <tr><td colSpan={6} className={styles.empty}>No tickets.</td></tr>
-                )}
-                {contact.tickets.map(t => (
-                  <tr key={t.id} className={styles.row} onClick={() => navigate(`/tickets/${t.id}`)}>
-                    <td className={styles.ref}>{t.reference}</td>
-                    <td className={styles.subject}>{t.subject}</td>
-                    <td><StatusBadge status={t.status} /></td>
-                    <td><PriorityBadge priority={t.priority} /></td>
-                    <td className={styles.muted}>{formatDate(t.created_at)}</td>
-                    <td className={styles.muted}>{formatDate(t.updated_at)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        {activeTab === 'activity' && (
+          <ActivityTimeline contactId={id} />
+        )}
       </div>
 
       {showEdit && (
@@ -140,6 +161,72 @@ export default function ContactDetail() {
           onClose={() => setConfirmDelete(false)}
         />
       )}
+    </div>
+  )
+}
+
+// ─── Activity Timeline ────────────────────────────────────────────────────────
+
+const EVENT_CONFIG = {
+  ticket_created:      { color: '#4F7FFF', label: 'Ticket created' },
+  ticket_resolved:     { color: '#22C55E', label: 'Ticket resolved' },
+  reply_from_contact:  { color: '#F59E0B', label: 'Reply from contact' },
+  reply_from_agent:    { color: '#F59E0B', label: 'Agent reply' },
+  service_request:     { color: '#7C3AED', label: 'Service request' },
+}
+
+function ActivityTimeline({ contactId }) {
+  const [events, setEvents] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    setLoading(true)
+    apiFetch(`/api/contacts/${contactId}/activity`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.error) throw new Error(data.error)
+        setEvents(data)
+        setLoading(false)
+      })
+      .catch(err => { setError(err.message); setLoading(false) })
+  }, [contactId])
+
+  if (loading) return <div className={styles.state}>Loading activity…</div>
+  if (error)   return <div className={`${styles.state} ${styles.err}`}>{error}</div>
+  if (!events.length) return <div className={styles.state}>No activity recorded yet.</div>
+
+  return (
+    <div className={styles.timeline}>
+      {events.map((ev, idx) => {
+        const cfg = EVENT_CONFIG[ev.type] || { color: '#9CA3AF', label: ev.type }
+        return (
+          <div key={idx} className={styles.timelineItem}>
+            <div className={styles.timelineDotWrap}>
+              <div className={styles.timelineDot} style={{ background: cfg.color }} />
+              {idx < events.length - 1 && <div className={styles.timelineLine} />}
+            </div>
+            <div className={styles.timelineBody}>
+              <div className={styles.timelineDesc}>
+                {ev.link ? (
+                  <Link to={ev.link} className={styles.timelineLink}>{ev.description}</Link>
+                ) : (
+                  ev.description
+                )}
+              </div>
+              {ev.metadata?.preview && (
+                <div className={styles.timelinePreview}>{ev.metadata.preview}</div>
+              )}
+              <div
+                className={styles.timelineTime}
+                title={formatDate(ev.timestamp)}
+              >
+                {timeAgo(ev.timestamp)}
+              </div>
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }

@@ -1,8 +1,9 @@
-const express = require('express');
-const router = express.Router();
-const nodemailer = require('nodemailer');
-const db = require('../db');
+const express      = require('express');
+const router       = express.Router();
+const nodemailer   = require('nodemailer');
+const db           = require('../db');
 const { encrypt, decrypt } = require('../lib/crypto');
+const requireAdmin = require('../middleware/requireAdmin');
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -45,7 +46,7 @@ router.get('/smtp', async (req, res) => {
 
 // ─── PUT /api/settings/smtp ───────────────────────────────────────────────────
 
-router.put('/smtp', async (req, res) => {
+router.put('/smtp', requireAdmin, async (req, res) => {
   const { smtp_host, smtp_port, smtp_secure, smtp_user, smtp_pass, smtp_from_name, smtp_from_email } = req.body;
 
   try {
@@ -166,7 +167,7 @@ router.get('/inbound', async (req, res) => {
 
 // ─── PUT /api/settings/inbound ────────────────────────────────────────────────
 
-router.put('/inbound', async (req, res) => {
+router.put('/inbound', requireAdmin, async (req, res) => {
   const { imap_host, imap_port, imap_tls, imap_folder, imap_poll_interval, imap_user, imap_pass } = req.body;
   try {
     const updates = {
@@ -251,7 +252,7 @@ router.get('/ai', async (req, res) => {
 
 // ─── PUT /api/settings/ai ─────────────────────────────────────────────────────
 
-router.put('/ai', async (req, res) => {
+router.put('/ai', requireAdmin, async (req, res) => {
   const { ai_provider, ai_model, ai_api_key } = req.body;
   try {
     const updates = {
@@ -338,7 +339,7 @@ router.get('/sla', async (req, res) => {
 
 // ─── PUT /api/settings/sla ────────────────────────────────────────────────────
 
-router.put('/sla', async (req, res) => {
+router.put('/sla', requireAdmin, async (req, res) => {
   const { sla_hours_high, sla_hours_medium, sla_hours_low } = req.body;
   try {
     const updates = {
@@ -357,6 +358,39 @@ router.put('/sla', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to save SLA settings' });
+  }
+});
+
+// ─── GET /api/settings/notifications ─────────────────────────────────────────
+
+router.get('/notifications', async (req, res) => {
+  try {
+    const result = await db.query(`SELECT key, value FROM settings WHERE key LIKE 'notifications_%'`);
+    const s = Object.fromEntries(result.rows.map(r => [r.key, r.value]));
+    res.json({
+      notifications_agent_email: s.notifications_agent_email !== 'false', // default true
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to load notification settings' });
+  }
+});
+
+// ─── PUT /api/settings/notifications ─────────────────────────────────────────
+
+router.put('/notifications', requireAdmin, async (req, res) => {
+  const { notifications_agent_email } = req.body;
+  try {
+    const value = notifications_agent_email === false || notifications_agent_email === 'false' ? 'false' : 'true';
+    await db.query(
+      `INSERT INTO settings (key, value) VALUES ('notifications_agent_email', $1)
+       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+      [value]
+    );
+    res.json({ notifications_agent_email: value !== 'false' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to save notification settings' });
   }
 });
 

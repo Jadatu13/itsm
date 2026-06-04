@@ -49,3 +49,9 @@ export function AuthProvider({ children }) {
 export function useAuth() {
   return useContext(AuthContext)
 }
+
+/** Returns true if the currently signed-in agent has the admin role */
+export function useIsAdmin() {
+  const { agent } = useContext(AuthContext)
+  return agent?.role === 'admin'
+}

@@ -1,7 +1,8 @@
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { useAuth } from '../context/AuthContext'
+import { useAuth, useIsAdmin } from '../context/AuthContext'
 import { useEffect, useState, useCallback } from 'react'
 import { apiFetch } from '../utils/api'
+import GlobalSearch from './GlobalSearch'
 import styles from './Layout.module.css'
 
 const PAGE_TITLES = {
@@ -33,9 +34,11 @@ function NavBadge({ count }) {
 export default function Layout() {
   const location = useLocation()
   const { agent, logout } = useAuth()
+  const isAdmin = useIsAdmin()
   const navigate = useNavigate()
 
   const [counts, setCounts] = useState({ pending_approvals: 0, awaiting_reply: 0, unassigned: 0 })
+  const [searchOpen, setSearchOpen] = useState(false)
 
   const fetchCounts = useCallback(() => {
     apiFetch('/api/notifications/counts')
@@ -59,6 +62,18 @@ export default function Layout() {
     location.pathname === path || (path !== '/dashboard' && location.pathname.startsWith(path + '/'))
   )?.[1] ?? 'ITSM'
 
+  // Cmd/Ctrl+K opens global search
+  useEffect(() => {
+    function onKeyDown(e) {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault()
+        setSearchOpen(true)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
+
   function handleLogout() {
     logout()
     navigate('/login')
@@ -75,6 +90,14 @@ export default function Layout() {
           <span className={styles.brandIcon}>⚙</span>
           <span className={styles.brandName}>ITSM</span>
         </div>
+
+        <button className={styles.searchTrigger} onClick={() => setSearchOpen(true)}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          <span>Search…</span>
+          <kbd className={styles.searchKbd}>⌘K</kbd>
+        </button>
 
         <nav className={styles.nav}>
           <NavLink to="/dashboard" className={({ isActive }) => isActive ? `${styles.navLink} ${styles.active}` : styles.navLink}>
@@ -144,10 +167,12 @@ export default function Layout() {
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
             🔗 Client Portal
           </a>
-          <NavLink to="/settings" end className={({ isActive }) => isActive ? `${styles.navLink} ${styles.active}` : styles.navLink}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-            Settings
-          </NavLink>
+          {isAdmin && (
+            <NavLink to="/settings" end className={({ isActive }) => isActive ? `${styles.navLink} ${styles.active}` : styles.navLink}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+              Settings
+            </NavLink>
+          )}
 
           {agent && (
             <div className={styles.agentRow}>
@@ -167,6 +192,8 @@ export default function Layout() {
       <div className={styles.main}>
         <Outlet context={{ title }} />
       </div>
+
+      {searchOpen && <GlobalSearch onClose={() => setSearchOpen(false)} />}
     </div>
   )
 }

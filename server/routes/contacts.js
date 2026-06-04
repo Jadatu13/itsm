@@ -24,7 +24,7 @@ router.get('/', async (req, res) => {
        LEFT JOIN tickets t ON t.contact_id = c.id
        ${where}
        GROUP BY c.id, o.id, o.name
-       ORDER BY c.last_name, c.first_name`,
+       ORDER BY lower(c.first_name) NULLS LAST, lower(c.last_name) NULLS LAST`,
       params
     );
     res.json(result.rows);

@@ -136,7 +136,7 @@ export default function PortalTicketDetail() {
                     {r.attachments?.length > 0 && (
                       <div className={styles.portalAttachmentList}>
                         {r.attachments.map(att => (
-                          <a key={att.id} href={`/api/attachments/${att.id}`} target="_blank" rel="noopener noreferrer" className={styles.portalAttachmentLink}>
+                          <a key={att.id} href={`/api/attachments/${att.id}?token=${encodeURIComponent(localStorage.getItem('portal_token') || sessionStorage.getItem('portal_preview_token') || '')}`} target="_blank" rel="noopener noreferrer" className={styles.portalAttachmentLink}>
                             📎 {att.original_name}
                             <span className={styles.portalAttachmentSize}>{att.size_bytes ? ` (${Math.round(att.size_bytes / 1024)}KB)` : ''}</span>
                           </a>

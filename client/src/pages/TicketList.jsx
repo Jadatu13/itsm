@@ -449,10 +449,17 @@ export default function TicketList() {
 
 // ─── Helper: check if a view's params match the current URL params ────────────
 
+// Keys that define a "view" — any of these being set beyond what the view declares means it's a different view
+const VIEW_DEFINING_KEYS = ['status', 'assigned_to', 'priority', 'sla', 'source', 'category']
+
 function isViewActive(viewParams, searchParams) {
   const keys = Object.keys(viewParams)
   if (keys.length === 0) return false
-  return keys.every(k => searchParams.get(k) === String(viewParams[k]))
+  // All params in this view must match
+  if (!keys.every(k => searchParams.get(k) === String(viewParams[k]))) return false
+  // No extra view-defining keys should be set that this view doesn't declare
+  const extra = VIEW_DEFINING_KEYS.filter(k => !viewParams[k] && searchParams.get(k))
+  return extra.length === 0
 }
 
 // ─── New Ticket Modal ─────────────────────────────────────────────────────────

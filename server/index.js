@@ -53,7 +53,7 @@ app.use('/api/branding',        brandingRoutes);
 app.use('/api/tenants',         requireAuth, tenantRoutes);
 app.use('/api/ai',              requireAuth, aiRoutes);
 app.use('/api/notifications',   requireAuth, notificationRoutes);
-app.use('/api/attachments',     requireAuth, attachmentRoutes);
+app.use('/api/attachments',     attachmentRoutes);  // auth handled inline (supports ?token= for browser downloads)
 app.use('/api/search',          requireAuth, searchRoutes);
 app.use('/api/custom-fields',   requireAuth, customFieldsRoutes);
 app.use('/api/audit',           requireAuth, auditRoutes);

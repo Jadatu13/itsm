@@ -209,7 +209,7 @@ export default function TicketDetail() {
                 {r.attachments?.length > 0 && (
                   <div className={styles.attachmentList}>
                     {r.attachments.map(att => (
-                      <a key={att.id} href={`/api/attachments/${att.id}`} target="_blank" rel="noopener noreferrer" className={styles.attachmentLink}>
+                      <a key={att.id} href={`/api/attachments/${att.id}?token=${encodeURIComponent(localStorage.getItem('token') || '')}`} target="_blank" rel="noopener noreferrer" className={styles.attachmentLink}>
                         📎 {att.original_name}
                         <span className={styles.attachmentSize}>{att.size_bytes ? ` (${Math.round(att.size_bytes / 1024)}KB)` : ''}</span>
                       </a>

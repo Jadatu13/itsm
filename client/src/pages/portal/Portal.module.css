@@ -206,6 +206,23 @@
   background: var(--portal-accent-hover);
 }
 
+.btnSecondary {
+  padding: 9px 18px;
+  background: transparent;
+  color: var(--portal-text-muted, #6b7280);
+  border: 1px solid var(--portal-border, #e5e7eb);
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s, color .15s;
+}
+
+.btnSecondary:hover {
+  background: var(--portal-bg, #f8f9fb);
+  color: var(--portal-text, #111827);
+}
+
 .btnPrimary:disabled {
   opacity: .6;
   cursor: not-allowed;

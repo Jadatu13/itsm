@@ -17,6 +17,8 @@ export default function PortalLogin() {
   const [email, setEmail] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [sent, setSent] = useState(false)
+  const [verifying, setVerifying] = useState(false)
   const [branding, setBranding] = useState(BRANDING_DEFAULTS)
   const navigate = useNavigate()
 
@@ -27,23 +29,44 @@ export default function PortalLogin() {
       .catch(() => {})
   }, [])
 
+  // If we arrived via a magic link (?token=…), exchange it for a session.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const token = params.get('token')
+    if (!token) return
+    setVerifying(true)
+    portalFetch('/api/portal/auth/verify', {
+      method: 'POST',
+      body: JSON.stringify({ token }),
+    })
+      .then(async res => {
+        const data = await res.json()
+        if (!res.ok) { setError(data.error || 'Sign in failed.'); return }
+        localStorage.setItem('portal_token', data.token)
+        localStorage.setItem('portal_contact', JSON.stringify(data.contact))
+        // Strip the token from the URL before navigating.
+        window.history.replaceState({}, '', '/portal/login')
+        navigate('/portal/dashboard')
+      })
+      .catch(() => setError('Something went wrong verifying your sign-in link.'))
+      .finally(() => setVerifying(false))
+  }, [navigate])
+
   async function handleSubmit(e) {
     e.preventDefault()
     setError('')
     setLoading(true)
     try {
-      const res = await portalFetch('/api/portal/auth/login', {
+      const res = await portalFetch('/api/portal/auth/request-link', {
         method: 'POST',
         body: JSON.stringify({ email }),
       })
       const data = await res.json()
       if (!res.ok) {
-        setError(data.error || 'Sign in failed.')
+        setError(data.error || 'Could not send sign-in link.')
         return
       }
-      localStorage.setItem('portal_token', data.token)
-      localStorage.setItem('portal_contact', JSON.stringify(data.contact))
-      navigate('/portal/dashboard')
+      setSent(true)
     } catch {
       setError('Something went wrong. Please try again.')
     } finally {
@@ -69,30 +92,50 @@ export default function PortalLogin() {
           <h1 className={styles.loginTitle}>{branding.login_title}</h1>
           <p className={styles.loginSubtitle}>{branding.login_subtitle}</p>
         </div>
-        <form onSubmit={handleSubmit}>
-          <div className={styles.formGroup}>
-            <label className={styles.formLabel} htmlFor="email">Email address</label>
-            <input
-              id="email"
-              type="email"
-              className={styles.formInput}
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              placeholder="you@company.com"
-              required
-              autoFocus
-            />
+        {verifying ? (
+          <p className={styles.loginSubtitle} style={{ textAlign: 'center' }}>Signing you in…</p>
+        ) : sent ? (
+          <div style={{ textAlign: 'center' }}>
+            <p style={{ fontSize: '1rem', fontWeight: 600, marginBottom: 8 }}>Check your email 📬</p>
+            <p className={styles.loginSubtitle}>
+              If an account exists for <strong>{email}</strong>, we've sent a secure sign-in
+              link. It's valid for 15 minutes.
+            </p>
+            <button
+              type="button"
+              className={styles.btnSecondary}
+              style={{ marginTop: 12 }}
+              onClick={() => { setSent(false); setEmail('') }}
+            >
+              Use a different email
+            </button>
           </div>
-          <button
-            type="submit"
-            className={styles.btnPrimary}
-            disabled={loading}
-            style={{ background: branding.button_bg, color: branding.button_text }}
-          >
-            {loading ? 'Signing in…' : 'Sign In'}
-          </button>
-          {error && <div className={styles.errorMsg}>{error}</div>}
-        </form>
+        ) : (
+          <form onSubmit={handleSubmit}>
+            <div className={styles.formGroup}>
+              <label className={styles.formLabel} htmlFor="email">Email address</label>
+              <input
+                id="email"
+                type="email"
+                className={styles.formInput}
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                placeholder="you@company.com"
+                required
+                autoFocus
+              />
+            </div>
+            <button
+              type="submit"
+              className={styles.btnPrimary}
+              disabled={loading}
+              style={{ background: branding.button_bg, color: branding.button_text }}
+            >
+              {loading ? 'Sending link…' : 'Email me a sign-in link'}
+            </button>
+            {error && <div className={styles.errorMsg}>{error}</div>}
+          </form>
+        )}
       </div>
     </div>
   )

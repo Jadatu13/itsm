@@ -86,8 +86,16 @@
   font-size: 14px;
   color: var(--text-primary);
   line-height: 1.65;
-  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: break-word;
 }
+.description :global(p),
+.description :global(div) { margin: 0 0 0.3em; padding: 0; }
+.description :global(p:last-child),
+.description :global(div:last-child) { margin-bottom: 0; }
+.description :global(p:empty),
+.description :global(div:empty) { display: none; }
+.description :global(hr) { display: none; }
 
 .thread {
   display: flex;
@@ -149,7 +157,9 @@
   border-radius: 12px;
   font-size: 13.5px;
   line-height: 1.6;
-  white-space: pre-wrap;
+  /* Do NOT use white-space:pre-wrap here — content is HTML, not plain text */
+  word-break: break-word;
+  overflow-wrap: break-word;
 }
 
 .agent .bubbleBody {
@@ -158,9 +168,13 @@
   border-bottom-right-radius: 4px;
 }
 
-/* Rich HTML content inside bubbles */
-.bubbleBody :global(p) { margin: 0 0 0.45em; }
-.bubbleBody :global(p:last-child) { margin-bottom: 0; }
+/* Rich HTML content inside bubbles — normalise email-client block elements */
+.bubbleBody :global(p),
+.bubbleBody :global(div) { margin: 0 0 0.3em; padding: 0; }
+.bubbleBody :global(p:last-child),
+.bubbleBody :global(div:last-child) { margin-bottom: 0; }
+.bubbleBody :global(p:empty),
+.bubbleBody :global(div:empty) { display: none; }
 .bubbleBody :global(h1), .bubbleBody :global(h2), .bubbleBody :global(h3) {
   font-weight: 700; margin: 0.5em 0 0.25em; line-height: 1.3;
 }

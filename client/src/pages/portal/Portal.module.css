@@ -462,9 +462,17 @@
   padding: 16px;
   font-size: 0.9rem;
   color: var(--portal-text);
-  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: break-word;
   margin-bottom: 24px;
 }
+.descriptionBox :global(p),
+.descriptionBox :global(div) { margin: 0 0 0.3em; padding: 0; }
+.descriptionBox :global(p:last-child),
+.descriptionBox :global(div:last-child) { margin-bottom: 0; }
+.descriptionBox :global(p:empty),
+.descriptionBox :global(div:empty) { display: none; }
+.descriptionBox :global(hr) { display: none; }
 
 .conversationSection {
   margin-bottom: 24px;
@@ -491,6 +499,8 @@
   border-radius: 12px;
   font-size: 0.9rem;
   line-height: 1.5;
+  word-break: break-word;
+  overflow-wrap: break-word;
 }
 
 .messageAgent {
@@ -515,9 +525,14 @@
   opacity: .75;
 }
 
-/* Rich HTML content inside message bubbles */
-.messageBubble :global(p) { margin: 0 0 0.4em; }
-.messageBubble :global(p:last-child) { margin-bottom: 0; }
+/* Rich HTML content inside message bubbles — normalise email-client block elements */
+.messageBubble :global(p),
+.messageBubble :global(div) { margin: 0 0 0.3em; padding: 0; }
+.messageBubble :global(p:last-child),
+.messageBubble :global(div:last-child) { margin-bottom: 0; }
+.messageBubble :global(p:empty),
+.messageBubble :global(div:empty) { display: none; }
+.messageBubble :global(hr) { display: none; }
 .messageBubble :global(h1),.messageBubble :global(h2),.messageBubble :global(h3) { font-weight: 700; margin: 0.5em 0 0.2em; }
 .messageBubble :global(h1) { font-size: 1.1em; }
 .messageBubble :global(h2) { font-size: 1em; }

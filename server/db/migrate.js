@@ -181,6 +181,7 @@ const STEPS = [
       ticket_subject_template TEXT,
       automation_action       JSONB,
       automation_tenant_id    INT,
+      requires_approval       BOOLEAN DEFAULT false,
       enabled         BOOLEAN DEFAULT true,
       sort_order      INT DEFAULT 0,
       created_at      TIMESTAMPTZ DEFAULT NOW(),
@@ -188,38 +189,60 @@ const STEPS = [
     )`],
   ['service_request_forms.automation_action',    `ALTER TABLE service_request_forms ADD COLUMN IF NOT EXISTS automation_action JSONB`],
   ['service_request_forms.automation_tenant_id', `ALTER TABLE service_request_forms ADD COLUMN IF NOT EXISTS automation_tenant_id INT`],
+  ['service_request_forms.requires_approval',    `ALTER TABLE service_request_forms ADD COLUMN IF NOT EXISTS requires_approval BOOLEAN DEFAULT false`],
 
   ['service_requests', `
     CREATE TABLE IF NOT EXISTS service_requests (
-      id           SERIAL PRIMARY KEY,
-      form_id      INT REFERENCES service_request_forms(id) ON DELETE SET NULL,
-      contact_id   INT REFERENCES contacts(id) ON DELETE CASCADE,
-      ticket_id    INT REFERENCES tickets(id) ON DELETE SET NULL,
-      form_name    TEXT,
-      field_values JSONB NOT NULL DEFAULT '{}',
-      status       TEXT DEFAULT 'pending',
-      automation_log JSONB,
-      created_at   TIMESTAMPTZ DEFAULT NOW()
+      id              SERIAL PRIMARY KEY,
+      form_id         INT REFERENCES service_request_forms(id) ON DELETE SET NULL,
+      contact_id      INT REFERENCES contacts(id) ON DELETE SET NULL,
+      ticket_id       INT REFERENCES tickets(id) ON DELETE SET NULL,
+      form_name       TEXT,
+      field_values    JSONB NOT NULL DEFAULT '{}',
+      approval_status  TEXT DEFAULT 'not_required',
+      approved_by      INT REFERENCES agents(id) ON DELETE SET NULL,
+      approved_at      TIMESTAMPTZ,
+      rejection_reason TEXT,
+      execution_status TEXT,
+      execution_log    JSONB,
+      created_at      TIMESTAMPTZ DEFAULT NOW()
     )`],
-  ['service_requests.status',         `ALTER TABLE service_requests ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending'`],
-  ['service_requests.automation_log', `ALTER TABLE service_requests ADD COLUMN IF NOT EXISTS automation_log JSONB`],
+  ['service_requests.approval_status',  `ALTER TABLE service_requests ADD COLUMN IF NOT EXISTS approval_status TEXT DEFAULT 'not_required'`],
+  ['service_requests.approved_by',      `ALTER TABLE service_requests ADD COLUMN IF NOT EXISTS approved_by INT REFERENCES agents(id) ON DELETE SET NULL`],
+  ['service_requests.approved_at',      `ALTER TABLE service_requests ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ`],
+  ['service_requests.rejection_reason', `ALTER TABLE service_requests ADD COLUMN IF NOT EXISTS rejection_reason TEXT`],
+  ['service_requests.execution_status', `ALTER TABLE service_requests ADD COLUMN IF NOT EXISTS execution_status TEXT`],
+  ['service_requests.execution_log',    `ALTER TABLE service_requests ADD COLUMN IF NOT EXISTS execution_log JSONB`],
 
   ['automations', `
     CREATE TABLE IF NOT EXISTS automations (
-      id          SERIAL PRIMARY KEY,
-      name        TEXT NOT NULL,
-      trigger     TEXT NOT NULL,
-      conditions  JSONB NOT NULL DEFAULT '[]',
-      actions     JSONB NOT NULL DEFAULT '[]',
-      enabled     BOOLEAN DEFAULT true,
-      created_at  TIMESTAMPTZ DEFAULT NOW()
+      id           SERIAL PRIMARY KEY,
+      name         TEXT NOT NULL,
+      trigger_type TEXT NOT NULL,
+      match_all    BOOLEAN DEFAULT true,
+      conditions   JSONB NOT NULL DEFAULT '[]',
+      actions      JSONB NOT NULL DEFAULT '[]',
+      enabled      BOOLEAN DEFAULT true,
+      created_at   TIMESTAMPTZ DEFAULT NOW()
     )`],
 
   ['portal_branding', `
     CREATE TABLE IF NOT EXISTS portal_branding (
-      id          INT PRIMARY KEY DEFAULT 1,
-      settings    JSONB NOT NULL DEFAULT '{}',
-      updated_at  TIMESTAMPTZ DEFAULT NOW()
+      id              INT PRIMARY KEY DEFAULT 1,
+      brand_name      TEXT,
+      logo_url        TEXT,
+      primary_color   TEXT,
+      nav_bg          TEXT,
+      nav_text        TEXT,
+      nav_active_bg   TEXT,
+      nav_active_text TEXT,
+      page_bg         TEXT,
+      button_bg       TEXT,
+      button_text     TEXT,
+      login_title     TEXT,
+      login_subtitle  TEXT,
+      footer_text     TEXT,
+      updated_at      TIMESTAMPTZ DEFAULT NOW()
     )`],
 
   // ── M365 ────────────────────────────────────────────────────────────────────
@@ -244,7 +267,8 @@ const STEPS = [
       tenant_id  INT  NOT NULL REFERENCES m365_tenants(id) ON DELETE CASCADE,
       alias      TEXT NOT NULL,
       group_name TEXT NOT NULL,
-      created_at TIMESTAMPTZ DEFAULT NOW()
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE (tenant_id, alias)
     )`],
 
   // ── Attachments, custom fields, time tracking ───────────────────────────────

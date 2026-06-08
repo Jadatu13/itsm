@@ -8,6 +8,19 @@
  */
 
 const db = require('./db');
+const { decrypt } = require('./lib/crypto');
+
+// In-memory access-token cache keyed by `${tenantId}:${scope}` to avoid
+// requesting a new token on every Graph/Exchange call. 60s safety skew.
+const tokenCache = new Map();
+function getCachedToken(key) {
+  const hit = tokenCache.get(key);
+  if (hit && hit.exp - 60000 > Date.now()) return hit.token;
+  return null;
+}
+function setCachedToken(key, token, expiresInSec) {
+  tokenCache.set(key, { token, exp: Date.now() + (expiresInSec * 1000) });
+}
 
 // ── Input-safety helpers ────────────────────────────────────────────────────────
 
@@ -244,11 +257,15 @@ async function resolveUPN(tenant, firstName, lastName, domain, push) {
 // Always fetches a fresh token for real executions — never trust a cached token
 // for actual Graph API calls, as permissions may have changed since it was issued.
 async function getFreshToken(tenant) {
+  const cacheKey = `${tenant.id}:graph`;
+  const cached = getCachedToken(cacheKey);
+  if (cached) return cached;
+
   const url = `https://login.microsoftonline.com/${tenant.tenant_id}/oauth2/v2.0/token`;
   const body = new URLSearchParams({
     grant_type:    'client_credentials',
     client_id:     tenant.client_id,
-    client_secret: tenant.client_secret,
+    client_secret: decrypt(tenant.client_secret),
     scope:         'https://graph.microsoft.com/.default',
   });
 
@@ -267,6 +284,7 @@ async function getFreshToken(tenant) {
 
   const data = await res.json();
   const expiresAt = new Date(Date.now() + data.expires_in * 1000);
+  setCachedToken(cacheKey, data.access_token, data.expires_in);
 
   // Persist so the tenant card shows "Connected"
   await db.query(
@@ -279,11 +297,15 @@ async function getFreshToken(tenant) {
 
 // ── Exchange Online token (Exchange.ManageAsApp scope) ────────────────────────
 async function getExchangeToken(tenant) {
+  const cacheKey = `${tenant.id}:exchange`;
+  const cached = getCachedToken(cacheKey);
+  if (cached) return cached;
+
   const url = `https://login.microsoftonline.com/${tenant.tenant_id}/oauth2/v2.0/token`;
   const body = new URLSearchParams({
     grant_type:    'client_credentials',
     client_id:     tenant.client_id,
-    client_secret: tenant.client_secret,
+    client_secret: decrypt(tenant.client_secret),
     scope:         'https://outlook.office365.com/.default',
   });
   const res = await fetch(url, {
@@ -298,6 +320,7 @@ async function getExchangeToken(tenant) {
     throw new Error(`Exchange token request failed: ${msg}`);
   }
   const data = await res.json();
+  setCachedToken(cacheKey, data.access_token, data.expires_in);
   return data.access_token;
 }
 
@@ -1035,11 +1058,22 @@ async function executeAutomation(serviceRequest, form) {
     return { success: true, mock: true, log: [{ level: 'info', message: 'No automation actions configured.', time: new Date().toISOString() }] };
   }
 
-  // Resolve tenant from the contact's linked organisation — no fallback.
+  // Resolve the tenant. Order of preference:
+  //   1. The tenant explicitly pinned on the form (form.automation_tenant_id)
+  //   2. The tenant linked to the submitting contact's organisation
   let tenant = null;
   let contactEmail = null;
   let orgName = null;
   try {
+    // 1. Form-pinned tenant takes precedence (must still be connected).
+    if (form.automation_tenant_id) {
+      const ft = await db.query(
+        `SELECT * FROM m365_tenants WHERE id = $1 AND connected = true LIMIT 1`,
+        [form.automation_tenant_id]
+      );
+      tenant = ft.rows[0] || null;
+    }
+
     if (serviceRequest.contact_id) {
       const cr = await db.query(
         `SELECT c.email, c.organisation_id, o.name AS org_name
@@ -1052,7 +1086,8 @@ async function executeAutomation(serviceRequest, form) {
       if (contact) {
         contactEmail = contact.email;
         orgName = contact.org_name || null;
-        if (contact.organisation_id) {
+        // 2. Fall back to the contact-org tenant only if no form tenant resolved.
+        if (!tenant && contact.organisation_id) {
           const tr = await db.query(
             `SELECT * FROM m365_tenants WHERE organisation_id = $1 AND connected = true LIMIT 1`,
             [contact.organisation_id]

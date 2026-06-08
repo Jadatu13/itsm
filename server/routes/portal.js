@@ -6,6 +6,7 @@ const portalAuth = require('../middleware/portalAuth');
 const requireAuth = require('../middleware/auth');
 const requireAdmin = require('../middleware/requireAdmin');
 const { sign, verify } = require('../lib/secret');
+const { decrypt } = require('../lib/crypto');
 const { sendMagicLink } = require('../email');
 
 const APP_URL = (process.env.APP_URL || 'http://localhost:8080').replace(/\/$/, '');
@@ -422,7 +423,7 @@ router.get('/graph/users', portalAuth, async (req, res) => {
     const tokenUrl = `https://login.microsoftonline.com/${tenant.tenant_id}/oauth2/v2.0/token`;
     const body = new URLSearchParams({
       grant_type: 'client_credentials', client_id: tenant.client_id,
-      client_secret: tenant.client_secret, scope: 'https://graph.microsoft.com/.default',
+      client_secret: decrypt(tenant.client_secret), scope: 'https://graph.microsoft.com/.default',
     });
     const tokenRes = await fetch(tokenUrl, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: body.toString() });
     if (!tokenRes.ok) return res.json({ users: [], connected: false });
@@ -457,7 +458,7 @@ router.get('/graph/groups', portalAuth, async (req, res) => {
     const tokenUrl = `https://login.microsoftonline.com/${tenant.tenant_id}/oauth2/v2.0/token`;
     const body = new URLSearchParams({
       grant_type: 'client_credentials', client_id: tenant.client_id,
-      client_secret: tenant.client_secret, scope: 'https://graph.microsoft.com/.default',
+      client_secret: decrypt(tenant.client_secret), scope: 'https://graph.microsoft.com/.default',
     });
     const tokenRes = await fetch(tokenUrl, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: body.toString() });
     if (!tokenRes.ok) return res.json({ groups: [], connected: false });

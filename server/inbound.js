@@ -14,6 +14,11 @@ const { decrypt }     = require('./lib/crypto');
 const { sendNewTicket, sendAgentNotification } = require('./email');
 const { runAutomations } = require('./automations');
 
+// Poison-message guard: track per-UID processing attempts so one bad message
+// can't be retried forever on every poll. Resets on process restart.
+const poisonCounts = new Map();
+const MAX_PROCESS_ATTEMPTS = 3;
+
 // ─── Notification helpers ─────────────────────────────────────────────────────
 
 async function agentEmailEnabled() {
@@ -130,9 +135,11 @@ async function saveAttachments(parsedAttachments, ticketId, replyId, htmlBody) {
        VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
       [ticketId, replyId || null, storedName, att.filename || storedName, att.contentType || null, att.content.length]
     );
-    // Replace cid: references in HTML body
+    // Replace cid: references in HTML body. Escape the (attacker-controlled) cid
+    // so regex metacharacters can't cause unintended replacements or ReDoS.
     if (att.cid && updatedHtml) {
-      updatedHtml = updatedHtml.replace(new RegExp(`cid:${att.cid}`, 'g'), `/api/attachments/${saved.rows[0].id}`);
+      const escapedCid = att.cid.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      updatedHtml = updatedHtml.replace(new RegExp(`cid:${escapedCid}`, 'g'), `/api/attachments/${saved.rows[0].id}`);
     }
   }
   return updatedHtml;
@@ -356,12 +363,32 @@ async function poll() {
         console.log(`[inbound] Processing ${uids.length} unseen message(s)…`);
         for (const uid of uids) {
           try {
-            const msg    = await client.fetchOne(uid, { source: true });
-            const parsed = await simpleParser(msg.source);
+            const msg = await client.fetchOne(uid, { source: true });
+            let parsed;
+            try {
+              parsed = await simpleParser(msg.source);
+            } catch (parseErr) {
+              // Malformed message — permanent failure. Mark seen so it doesn't
+              // loop forever poisoning every poll.
+              console.error(`[inbound] uid ${uid} is unparseable, skipping:`, parseErr.message);
+              await client.messageFlagsAdd(uid, ['\\Seen']);
+              poisonCounts.delete(uid);
+              continue;
+            }
             await processMessage(parsed);
             await client.messageFlagsAdd(uid, ['\\Seen']);
+            poisonCounts.delete(uid);
           } catch (err) {
-            console.error(`[inbound] Error processing uid ${uid}:`, err.message);
+            // Possibly transient (e.g. DB blip) — retry a few times, then give up
+            // and mark seen so a single bad message can't block the queue forever.
+            const n = (poisonCounts.get(uid) || 0) + 1;
+            poisonCounts.set(uid, n);
+            console.error(`[inbound] Error processing uid ${uid} (attempt ${n}):`, err.message);
+            if (n >= MAX_PROCESS_ATTEMPTS) {
+              console.error(`[inbound] uid ${uid} failed ${n}x — marking seen to avoid a poison loop.`);
+              try { await client.messageFlagsAdd(uid, ['\\Seen']); } catch { /* ignore */ }
+              poisonCounts.delete(uid);
+            }
           }
         }
       } else {

@@ -4,6 +4,7 @@ import Modal from '../components/Modal'
 import ConfirmModal from '../components/ConfirmModal'
 import { formatDate } from '../utils/format'
 import { apiFetch } from '../utils/api'
+import { sanitizeHtml } from '../utils/sanitizeHtml'
 import formStyles from '../styles/forms.module.css'
 import styles from './KnowledgeBase.module.css'
 
@@ -818,7 +819,7 @@ function ArticleView({ article, onClose, onEdit }) {
             <span className={styles.viewDate}>Updated {formatDate(article.updated_at)}</span>
           </div>
         </div>
-        <div className={styles.viewBody} dangerouslySetInnerHTML={{ __html: article.body }} />
+        <div className={styles.viewBody} dangerouslySetInnerHTML={{ __html: sanitizeHtml(article.body) }} />
         <div className={styles.editorFooter}>
           <button type="button" className={formStyles.btnSecondary} onClick={onClose}>Close</button>
           <button type="button" className={formStyles.btnPrimary} onClick={onEdit}>Edit Article</button>

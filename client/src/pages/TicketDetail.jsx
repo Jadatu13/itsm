@@ -35,6 +35,7 @@ export default function TicketDetail() {
   const [draftingAi, setDraftingAi] = useState(false)
   const [aiError, setAiError]       = useState(null)
   const [pendingFiles, setPendingFiles] = useState([])
+  const [dtToken, setDtToken] = useState('')
 
   const isFirstLoad  = useRef(true)
   const repliesEndRef = useRef(null)
@@ -57,7 +58,22 @@ export default function TicketDetail() {
   useEffect(() => {
     load()
     apiFetch('/api/agents').then(r => r.json()).then(d => { if (Array.isArray(d)) setAgents(d) })
+    // Mint a short-lived, ticket-scoped download token for attachment URLs
+    // (so the session JWT is never placed in a URL).
+    apiFetch(`/api/attachments/ticket/${id}/token`)
+      .then(r => (r.ok ? r.json() : { token: '' }))
+      .then(d => setDtToken(d.token || ''))
+      .catch(() => setDtToken(''))
   }, [id])
+
+  // Build an attachment URL using the ticket-scoped download token.
+  const attachmentUrl = attId => `/api/attachments/${attId}?dt=${encodeURIComponent(dtToken)}`
+  // Append the download token to inline <img src="/api/attachments/N"> in email bodies.
+  const withTokenisedAttachments = html =>
+    sanitizeEmailHtml(html).replace(
+      /(\/api\/attachments\/\d+)(?![?\w])/g,
+      `$1?dt=${encodeURIComponent(dtToken)}`
+    )
 
   useEffect(() => {
     if (isFirstLoad.current) { isFirstLoad.current = false; return }
@@ -194,7 +210,7 @@ export default function TicketDetail() {
         {/* ── Left column ── */}
         <div className={styles.left}>
           <h2 className={styles.subject}>{ticket.subject}</h2>
-          <div className={styles.description} dangerouslySetInnerHTML={{ __html: sanitizeEmailHtml(ticket.description) }} />
+          <div className={styles.description} dangerouslySetInnerHTML={{ __html: withTokenisedAttachments(ticket.description) }} />
 
           <div className={styles.thread}>
             <h3 className={styles.threadTitle}>Conversation</h3>
@@ -206,11 +222,11 @@ export default function TicketDetail() {
                   {r.is_internal && <span className={styles.noteTag}>Internal Note</span>}
                   <span className={styles.ts}>{formatDate(r.created_at)}</span>
                 </div>
-                <div className={styles.bubbleBody} dangerouslySetInnerHTML={{ __html: sanitizeEmailHtml(r.body) }} />
+                <div className={styles.bubbleBody} dangerouslySetInnerHTML={{ __html: withTokenisedAttachments(r.body) }} />
                 {r.attachments?.length > 0 && (
                   <div className={styles.attachmentList}>
                     {r.attachments.map(att => (
-                      <a key={att.id} href={`/api/attachments/${att.id}?token=${encodeURIComponent(localStorage.getItem('token') || '')}`} target="_blank" rel="noopener noreferrer" className={styles.attachmentLink}>
+                      <a key={att.id} href={attachmentUrl(att.id)} target="_blank" rel="noopener noreferrer" className={styles.attachmentLink}>
                         📎 {att.original_name}
                         <span className={styles.attachmentSize}>{att.size_bytes ? ` (${Math.round(att.size_bytes / 1024)}KB)` : ''}</span>
                       </a>

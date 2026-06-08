@@ -43,9 +43,19 @@ async function getConfig() {
 
 // ─── Low-level send ───────────────────────────────────────────────────────────
 
+// Strip CR/LF (and surrounding whitespace) from header-bound values to prevent
+// SMTP header injection via untrusted ticket subjects / recipient addresses.
+function headerSafe(value) {
+  return String(value ?? '').replace(/[\r\n]+/g, ' ').trim();
+}
+
 async function sendMail({ to, subject, html, text, replyTo }) {
   const config = await getConfig();
   if (!config) return;
+
+  to      = headerSafe(to);
+  subject = headerSafe(subject);
+  replyTo = replyTo ? headerSafe(replyTo) : replyTo;
 
   const transporter = nodemailer.createTransport({
     host:   config.host,

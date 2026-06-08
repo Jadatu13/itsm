@@ -1,6 +1,11 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
+const { encrypt, decrypt } = require('../lib/crypto');
+const requireAdmin = require('../middleware/requireAdmin');
+
+// M365 tenant credentials are sensitive — restrict all routes to admins.
+router.use(requireAdmin);
 
 // GET / — list all tenants
 router.get('/', async (req, res) => {
@@ -8,7 +13,7 @@ router.get('/', async (req, res) => {
     const result = await db.query(
       `SELECT t.id, t.display_name, t.tenant_id, t.client_id, t.connected, t.connected_at, t.created_at,
               t.organisation_id, o.name AS organisation_name,
-              LEFT(t.client_secret, 4) || '••••••••' AS client_secret_hint
+              '••••••••' AS client_secret_hint
        FROM m365_tenants t
        LEFT JOIN organisations o ON o.id = t.organisation_id
        ORDER BY t.created_at DESC`
@@ -83,7 +88,7 @@ router.post('/', async (req, res) => {
          (display_name, tenant_id, client_id, client_secret, access_token, token_expires_at, connected, connected_at, organisation_id)
        VALUES ($1, $2, $3, $4, $5, $6, true, NOW(), $7)
        RETURNING id, display_name, tenant_id, client_id, connected, connected_at, created_at, organisation_id`,
-      [resolvedName, tenant_id, client_id, client_secret, tokenData.access_token, expiresAt, organisation_id || null]
+      [resolvedName, tenant_id, client_id, encrypt(client_secret), tokenData.access_token, expiresAt, organisation_id || null]
     );
     res.status(201).json({ ...result.rows[0], ...(rolesWarning ? { warning: rolesWarning } : {}) });
   } catch (err) {
@@ -106,7 +111,7 @@ router.post('/:id/test', async (req, res) => {
     const body = new URLSearchParams({
       grant_type:    'client_credentials',
       client_id:     tenant.client_id,
-      client_secret: tenant.client_secret,
+      client_secret: decrypt(tenant.client_secret),
       scope:         'https://graph.microsoft.com/.default',
     });
     const tokenRes = await fetch(tokenUrl, {
@@ -144,7 +149,7 @@ router.post('/:id/diagnose', async (req, res) => {
     const formBody = new URLSearchParams({
       grant_type: 'client_credentials',
       client_id: tenant.client_id,
-      client_secret: tenant.client_secret,
+      client_secret: decrypt(tenant.client_secret),
       scope: 'https://graph.microsoft.com/.default',
     });
     const tokenRes = await fetch(tokenUrl, {
@@ -345,7 +350,7 @@ router.get('/:id/groups/search', async (req, res) => {
     const tokenBody = new URLSearchParams({
       grant_type: 'client_credentials',
       client_id: tenant.client_id,
-      client_secret: tenant.client_secret,
+      client_secret: decrypt(tenant.client_secret),
       scope: 'https://graph.microsoft.com/.default',
     });
     const tokenRes = await fetch(tokenUrl, {

@@ -167,8 +167,17 @@ async function processMessage(parsed) {
   const refMatch = subject.match(/\[TKT-(\d+)\]/i);
   if (refMatch) {
     const ref = `TKT-${refMatch[1].padStart(4, '0')}`;
-    const found = await db.query(`SELECT id FROM tickets WHERE reference = $1`, [ref]);
-    if (found.rows.length) {
+    const found = await db.query(
+      `SELECT t.id, LOWER(c.email) AS contact_email
+       FROM tickets t LEFT JOIN contacts c ON c.id = t.contact_id
+       WHERE t.reference = $1`,
+      [ref]
+    );
+    // Only append to an existing ticket if the sender is that ticket's contact.
+    // This prevents anyone from injecting replies into arbitrary tickets by
+    // guessing the sequential [TKT-####] reference. Otherwise fall through and
+    // treat the message as a brand-new ticket.
+    if (found.rows.length && found.rows[0].contact_email === senderEmail) {
       const ticketId = found.rows[0].id;
       const replyRes = await db.query(
         `INSERT INTO ticket_replies (ticket_id, body, is_agent_reply, is_internal)
@@ -323,7 +332,9 @@ async function poll() {
     secure: config.tls,
     auth:   { user: config.user, pass: config.pass },
     logger: false,
-    tls:    { rejectUnauthorized: false }, // allow self-signed certs
+    // Verify the server certificate by default. Self-signed certs may be allowed
+    // only by explicitly setting IMAP_ALLOW_SELF_SIGNED=true (non-production).
+    tls:    { rejectUnauthorized: process.env.IMAP_ALLOW_SELF_SIGNED !== 'true' },
   });
 
   // Prevent unhandled 'error' events from crashing the process

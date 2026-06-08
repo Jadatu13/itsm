@@ -9,6 +9,32 @@
 
 const db = require('./db');
 
+// ── Input-safety helpers ────────────────────────────────────────────────────────
+
+/**
+ * Escape a string for use inside an OData $filter literal and URL-encode it.
+ * OData escapes a single quote by doubling it ('' ) — encodeURIComponent does NOT
+ * do this, so a value like  x' or displayName eq 'y  could otherwise inject.
+ */
+function odataString(value) {
+  return encodeURIComponent(String(value ?? '').replace(/'/g, "''"));
+}
+
+const EMAIL_RE = /^[^\s@"'`;${}()<>]+@[^\s@"'`;${}()<>]+\.[^\s@"'`;${}()<>]+$/;
+
+/**
+ * Validate an email/UPN before it is interpolated into a Graph path or an
+ * Exchange PowerShell cmdlet string. Throws on anything that isn't a plain email
+ * so command/expression injection is impossible.
+ */
+function assertEmail(value, fieldName = 'email') {
+  const v = String(value ?? '').trim();
+  if (!EMAIL_RE.test(v)) {
+    throw new Error(`Invalid ${fieldName}: "${value}" is not a valid email address.`);
+  }
+  return v;
+}
+
 // ── Action definitions ────────────────────────────────────────────────────────
 const ACTION_TYPES = {
   create_user: {
@@ -605,6 +631,8 @@ async function liveExecute(tenant, actionType, params, contactEmail = null) {
       }
 
       case 'add_mailbox_permission': {
+        assertEmail(params.mailbox_email, 'mailbox_email');
+        assertEmail(params.user_email, 'user_email');
         push('info', `Granting ${params.permission_type} on mailbox ${params.mailbox_email} to ${params.user_email}`);
 
         if (params.permission_type === 'FullAccess') {
@@ -654,6 +682,8 @@ async function liveExecute(tenant, actionType, params, contactEmail = null) {
       }
 
       case 'remove_mailbox_permission': {
+        assertEmail(params.mailbox_email, 'mailbox_email');
+        assertEmail(params.user_email, 'user_email');
         push('info', `Revoking ${params.permission_type} on mailbox ${params.mailbox_email} from ${params.user_email}`);
 
         if (params.permission_type === 'FullAccess') {
@@ -722,7 +752,7 @@ async function liveExecute(tenant, actionType, params, contactEmail = null) {
       case 'add_to_group': {
         params.group_name = await resolveGroupName(tenant, params.group_name);
         push('info', `Looking up group: ${params.group_name}`);
-        const groups = await graphCall(tenant, 'GET', `/groups?$filter=displayName eq '${encodeURIComponent(params.group_name)}'&$select=id,displayName`);
+        const groups = await graphCall(tenant, 'GET', `/groups?$filter=displayName eq '${odataString(params.group_name)}'&$select=id,displayName`);
         const group = groups.value?.[0];
         if (!group) throw new Error(`Group "${params.group_name}" not found.`);
         push('info', `Found group: ${group.displayName} (${group.id})`);
@@ -730,7 +760,7 @@ async function liveExecute(tenant, actionType, params, contactEmail = null) {
         const addEmails = Array.isArray(params.user_email) ? params.user_email : [params.user_email].filter(Boolean);
         if (!addEmails.length) throw new Error('No users specified.');
         for (const email of addEmails) {
-          const ur = await graphCall(tenant, 'GET', `/users?$filter=userPrincipalName eq '${encodeURIComponent(email)}'&$select=id`);
+          const ur = await graphCall(tenant, 'GET', `/users?$filter=userPrincipalName eq '${odataString(email)}'&$select=id`);
           const u = ur.value?.[0];
           if (!u) { push('warning', `⚠️ User "${email}" not found — skipped.`); continue; }
           await graphCall(tenant, 'POST', `/groups/${group.id}/members/$ref`, {
@@ -744,14 +774,14 @@ async function liveExecute(tenant, actionType, params, contactEmail = null) {
       case 'remove_from_group': {
         params.group_name = await resolveGroupName(tenant, params.group_name);
         push('info', `Looking up group: ${params.group_name}`);
-        const rgroups = await graphCall(tenant, 'GET', `/groups?$filter=displayName eq '${encodeURIComponent(params.group_name)}'&$select=id,displayName`);
+        const rgroups = await graphCall(tenant, 'GET', `/groups?$filter=displayName eq '${odataString(params.group_name)}'&$select=id,displayName`);
         const rgroup = rgroups.value?.[0];
         if (!rgroup) throw new Error(`Group "${params.group_name}" not found.`);
 
         const removeEmails = Array.isArray(params.user_email) ? params.user_email : [params.user_email].filter(Boolean);
         if (!removeEmails.length) throw new Error('No users specified.');
         for (const email of removeEmails) {
-          const ur = await graphCall(tenant, 'GET', `/users?$filter=userPrincipalName eq '${encodeURIComponent(email)}'&$select=id`);
+          const ur = await graphCall(tenant, 'GET', `/users?$filter=userPrincipalName eq '${odataString(email)}'&$select=id`);
           const u = ur.value?.[0];
           if (!u) { push('warning', `⚠️ User "${email}" not found — skipped.`); continue; }
           await graphCall(tenant, 'DELETE', `/groups/${rgroup.id}/members/${u.id}/$ref`);
@@ -927,7 +957,7 @@ async function liveExecute(tenant, actionType, params, contactEmail = null) {
       case 'assign_admin_role': {
         push('info', `Looking up role: ${params.role_name}`);
         const roleDefs = await graphCall(tenant, 'GET',
-          `/roleManagement/directory/roleDefinitions?$filter=displayName eq '${encodeURIComponent(params.role_name)}'&$select=id,displayName`
+          `/roleManagement/directory/roleDefinitions?$filter=displayName eq '${odataString(params.role_name)}'&$select=id,displayName`
         );
         const roleDef = roleDefs.value?.[0];
         if (!roleDef) throw new Error(`Admin role "${params.role_name}" not found. Check the exact role display name.`);
@@ -945,7 +975,7 @@ async function liveExecute(tenant, actionType, params, contactEmail = null) {
       case 'remove_admin_role': {
         push('info', `Looking up role: ${params.role_name}`);
         const rRoleDefs = await graphCall(tenant, 'GET',
-          `/roleManagement/directory/roleDefinitions?$filter=displayName eq '${encodeURIComponent(params.role_name)}'&$select=id,displayName`
+          `/roleManagement/directory/roleDefinitions?$filter=displayName eq '${odataString(params.role_name)}'&$select=id,displayName`
         );
         const rRoleDef = rRoleDefs.value?.[0];
         if (!rRoleDef) throw new Error(`Admin role "${params.role_name}" not found.`);

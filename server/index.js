@@ -1,6 +1,8 @@
 require('dotenv').config();
 const express    = require('express');
 const cors       = require('cors');
+const helmet     = require('helmet');
+const rateLimit  = require('express-rate-limit');
 const bcrypt     = require('bcrypt');
 const db         = require('./db');
 const requireAuth = require('./middleware/auth');
@@ -31,11 +33,35 @@ const { startSlaMonitor } = require('./jobs/slaMonitor');
 const app  = express();
 const PORT = process.env.PORT || 3001;
 
-app.use(cors({ origin: process.env.CLIENT_URL || '*' }));
-app.use(express.json());
+// Behind nginx/Traefik — trust the proxy so rate-limit sees the real client IP.
+app.set('trust proxy', 1);
+
+// Security headers. CSP is disabled here (this is a JSON API; the SPA is served
+// separately by nginx) and CORP is relaxed so the front-end can embed images/
+// attachments when served from a different dev origin.
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+}));
+
+const corsOrigin = process.env.CLIENT_URL || '*';
+if (corsOrigin === '*') {
+  console.warn('[cors] CLIENT_URL is "*" — set it to your real front-end origin in production.');
+}
+app.use(cors({ origin: corsOrigin }));
+app.use(express.json({ limit: '1mb' }));
+
+// Throttle authentication endpoints (brute force / SSO-state abuse).
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests. Please wait a few minutes and try again.' },
+});
 
 // ── Public routes ─────────────────────────────────────────────────────────────
-app.use('/api/auth', authRoutes);
+app.use('/api/auth', authLimiter, authRoutes);
 
 // ── Protected routes ──────────────────────────────────────────────────────────
 app.use('/api/tickets',         requireAuth, ticketRoutes);

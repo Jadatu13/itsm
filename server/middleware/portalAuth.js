@@ -1,6 +1,5 @@
-const jwt = require('jsonwebtoken');
+const { verify } = require('../lib/secret');
 const db = require('../db');
-const SECRET = process.env.JWT_SECRET || 'itsm-dev-secret-change-in-production';
 
 module.exports = async function portalAuth(req, res, next) {
   const header = req.headers.authorization;
@@ -8,7 +7,7 @@ module.exports = async function portalAuth(req, res, next) {
     return res.status(401).json({ error: 'Unauthorised' });
   }
   try {
-    const payload = jwt.verify(header.slice(7), SECRET);
+    const payload = verify(header.slice(7));
     if (payload.type !== 'portal') {
       return res.status(401).json({ error: 'Unauthorised' });
     }

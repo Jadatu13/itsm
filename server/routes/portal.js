@@ -1,11 +1,10 @@
 const express = require('express');
 const router = express.Router();
-const jwt = require('jsonwebtoken');
 const db = require('../db');
 const portalAuth = require('../middleware/portalAuth');
 const requireAuth = require('../middleware/auth');
-
-const SECRET = process.env.JWT_SECRET || 'itsm-dev-secret-change-in-production';
+const requireAdmin = require('../middleware/requireAdmin');
+const { sign } = require('../lib/secret');
 
 // POST /api/portal/auth/login
 router.post('/auth/login', async (req, res) => {
@@ -20,9 +19,8 @@ router.post('/auth/login', async (req, res) => {
       return res.status(401).json({ error: 'No account found for this email address.' });
     }
     const contact = result.rows[0];
-    const token = jwt.sign(
+    const token = sign(
       { type: 'portal', contact_id: contact.id },
-      SECRET,
       { expiresIn: '7d' }
     );
     res.json({
@@ -455,8 +453,8 @@ router.get('/check-upn', portalAuth, async (req, res) => {
   }
 });
 
-// POST /api/portal/preview-token — requires agent auth
-router.post('/preview-token', requireAuth, async (req, res) => {
+// POST /api/portal/preview-token — admin only (impersonates a contact in the portal)
+router.post('/preview-token', requireAuth, requireAdmin, async (req, res) => {
   const { contact_id } = req.body;
   if (!contact_id) return res.status(400).json({ error: 'contact_id is required' });
   try {
@@ -468,9 +466,8 @@ router.post('/preview-token', requireAuth, async (req, res) => {
       return res.status(404).json({ error: 'Contact not found' });
     }
     const contact = result.rows[0];
-    const token = jwt.sign(
+    const token = sign(
       { type: 'portal', contact_id: contact.id, is_preview: true },
-      SECRET,
       { expiresIn: '2h' }
     );
     res.json({

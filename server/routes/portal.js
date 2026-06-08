@@ -131,7 +131,14 @@ router.get('/kb', portalAuth, async (req, res) => {
     }
     if (folder_id) {
       params.push(folder_id);
-      conditions.push(`a.folder_id = $${params.length}`);
+      // Include articles in this folder AND all descendant sub-folders
+      conditions.push(`a.folder_id IN (
+        WITH RECURSIVE sub AS (
+          SELECT id FROM kb_folders WHERE id = $${params.length}
+          UNION ALL
+          SELECT f.id FROM kb_folders f JOIN sub s ON f.parent_id = s.id
+        ) SELECT id FROM sub
+      )`);
     }
 
     const where = `WHERE ${conditions.join(' AND ')}`;
@@ -154,14 +161,32 @@ router.get('/kb', portalAuth, async (req, res) => {
 });
 
 // GET /api/portal/kb/folders — must be before /kb/:id
+// Returns all folders that contain (or are ancestors of) public published articles,
+// including parent_id so the client can build a nested tree.
 router.get('/kb/folders', portalAuth, async (req, res) => {
   try {
     const result = await db.query(
-      `SELECT DISTINCT f.id, f.name, f.icon
+      `WITH RECURSIVE
+       -- 1. folders that directly contain public articles
+       leaf_folders AS (
+         SELECT DISTINCT f.id
+         FROM kb_folders f
+         JOIN kb_articles a ON a.folder_id = f.id
+         WHERE a.visibility = 'public' AND a.published = true
+       ),
+       -- 2. walk up to include every ancestor of those folders
+       visible AS (
+         SELECT id FROM leaf_folders
+         UNION
+         SELECT f.parent_id
+         FROM kb_folders f
+         JOIN visible v ON v.id = f.id
+         WHERE f.parent_id IS NOT NULL
+       )
+       SELECT f.id, f.name, f.icon, f.sort_order, f.parent_id
        FROM kb_folders f
-       JOIN kb_articles a ON a.folder_id = f.id
-       WHERE a.visibility = 'public' AND a.published = true
-       ORDER BY f.name`
+       JOIN visible v ON v.id = f.id
+       ORDER BY f.sort_order, f.name`
     );
     res.json(result.rows);
   } catch (err) {

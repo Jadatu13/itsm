@@ -18,6 +18,40 @@ function stripHtml(html) {
     .trim()
 }
 
+// Build a nested tree from a flat array with parent_id
+function buildTree(folders) {
+  const map = {}
+  folders.forEach(f => { map[f.id] = { ...f, children: [] } })
+  const roots = []
+  folders.forEach(f => {
+    if (f.parent_id && map[f.parent_id]) {
+      map[f.parent_id].children.push(map[f.id])
+    } else {
+      roots.push(map[f.id])
+    }
+  })
+  return roots
+}
+
+// Recursive folder tree renderer
+function FolderTree({ nodes, activeFolder, onSelect, depth = 0 }) {
+  return nodes.map(f => (
+    <div key={f.id}>
+      <li
+        className={`${styles.folderItem} ${activeFolder === f.id ? styles.folderItemActive : ''}`}
+        style={{ paddingLeft: `${12 + depth * 18}px` }}
+        onClick={() => onSelect(activeFolder === f.id ? null : f.id)}
+      >
+        {depth > 0 && <span style={{ opacity: 0.4, marginRight: 4 }}>└</span>}
+        {f.icon || '📁'} {f.name}
+      </li>
+      {f.children.length > 0 && (
+        <FolderTree nodes={f.children} activeFolder={activeFolder} onSelect={onSelect} depth={depth + 1} />
+      )}
+    </div>
+  ))
+}
+
 export default function PortalKB() {
   const [articles, setArticles] = useState([])
   const [folders, setFolders] = useState([])
@@ -72,15 +106,11 @@ export default function PortalKB() {
               >
                 📂 All Articles
               </li>
-              {folders.map(f => (
-                <li
-                  key={f.id}
-                  className={`${styles.folderItem} ${activeFolder === f.id ? styles.folderItemActive : ''}`}
-                  onClick={() => setActiveFolder(activeFolder === f.id ? null : f.id)}
-                >
-                  {f.icon || '📁'} {f.name}
-                </li>
-              ))}
+              <FolderTree
+                nodes={buildTree(folders)}
+                activeFolder={activeFolder}
+                onSelect={setActiveFolder}
+              />
             </ul>
           </div>
         </div>

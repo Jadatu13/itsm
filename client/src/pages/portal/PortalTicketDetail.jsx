@@ -4,6 +4,18 @@ import { portalFetch } from '../../utils/portalApi'
 import RichTextEditor from '../../components/RichTextEditor'
 import styles from './Portal.module.css'
 
+function sanitizeEmailHtml(html) {
+  if (!html) return ''
+  return html
+    .replace(/<head[\s\S]*?<\/head>/gi, '')
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<!DOCTYPE[^>]*>/gi, '')
+    .replace(/<\/?(?:html|body)[^>]*>/gi, '')
+    .replace(/(<p[^>]*>\s*(?:<br\s*\/?>|&nbsp;|\s)*<\/p>\s*){3,}/gi, '<p></p>')
+    .trim()
+}
+
 function statusBadgeClass(status) {
   switch (status) {
     case 'open': return styles.badgeOpen
@@ -111,7 +123,7 @@ export default function PortalTicketDetail() {
 
           <div className={styles.card} style={{ marginBottom: 20 }}>
             <p className={styles.sectionTitle}>Description</p>
-            <div className={styles.descriptionBox}>{ticket.description}</div>
+            <div className={styles.descriptionBox} dangerouslySetInnerHTML={{ __html: sanitizeEmailHtml(ticket.description) }} />
           </div>
 
           <div className={`${styles.card} ${styles.conversationSection}`}>
@@ -132,7 +144,7 @@ export default function PortalTicketDetail() {
                     <div className={styles.messageSender}>
                       {r.sender_name || (isAgent ? 'Support Agent' : 'You')}
                     </div>
-                    <div dangerouslySetInnerHTML={{ __html: r.body }} />
+                    <div dangerouslySetInnerHTML={{ __html: sanitizeEmailHtml(r.body) }} />
                     {r.attachments?.length > 0 && (
                       <div className={styles.portalAttachmentList}>
                         {r.attachments.map(att => (

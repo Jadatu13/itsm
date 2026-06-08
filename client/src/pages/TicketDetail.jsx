@@ -8,6 +8,21 @@ import ContactSelect from '../components/ContactSelect'
 import RichTextEditor from '../components/RichTextEditor'
 import { formatDate } from '../utils/format'
 import { apiFetch } from '../utils/api'
+
+// Strip Outlook/email HTML cruft: remove <head>, <style>, <script> blocks,
+// unwrap <html>/<body> tags, and collapse runs of 3+ empty paragraphs.
+function sanitizeEmailHtml(html) {
+  if (!html) return ''
+  return html
+    .replace(/<head[\s\S]*?<\/head>/gi, '')
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<!DOCTYPE[^>]*>/gi, '')
+    .replace(/<\/?(?:html|body)[^>]*>/gi, '')
+    // collapse 3+ consecutive empty/whitespace-only paragraphs down to one
+    .replace(/(<p[^>]*>\s*(?:<br\s*\/?>|&nbsp;|\s)*<\/p>\s*){3,}/gi, '<p></p>')
+    .trim()
+}
 import { SlaChip } from './Dashboard'
 import formStyles from '../styles/forms.module.css'
 import styles from './TicketDetail.module.css'
@@ -193,7 +208,7 @@ export default function TicketDetail() {
         {/* ── Left column ── */}
         <div className={styles.left}>
           <h2 className={styles.subject}>{ticket.subject}</h2>
-          <div className={styles.description}>{ticket.description}</div>
+          <div className={styles.description} dangerouslySetInnerHTML={{ __html: sanitizeEmailHtml(ticket.description) }} />
 
           <div className={styles.thread}>
             <h3 className={styles.threadTitle}>Conversation</h3>
@@ -205,7 +220,7 @@ export default function TicketDetail() {
                   {r.is_internal && <span className={styles.noteTag}>Internal Note</span>}
                   <span className={styles.ts}>{formatDate(r.created_at)}</span>
                 </div>
-                <div className={styles.bubbleBody} dangerouslySetInnerHTML={{ __html: r.body }} />
+                <div className={styles.bubbleBody} dangerouslySetInnerHTML={{ __html: sanitizeEmailHtml(r.body) }} />
                 {r.attachments?.length > 0 && (
                   <div className={styles.attachmentList}>
                     {r.attachments.map(att => (

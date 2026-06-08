@@ -209,7 +209,9 @@ router.post('/', async (req, res) => {
       firstName:   t.first_name,
       reference:   t.reference,
       subject:     t.subject,
-      description: t.description,
+      description: t.description
+        ? t.description.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, ' ').replace(/<script[^>]*>[\s\S]*?<\/script>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim()
+        : '',
     });
 
     // Notify agent(s) of new ticket
@@ -225,7 +227,9 @@ router.post('/', async (req, res) => {
           ticketId:     t.id,
           ticketSubject: t.subject,
           contactName:  t.contact_name,
-          previewText:  t.description,
+          previewText:  t.description
+            ? t.description.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, ' ').replace(/<script[^>]*>[\s\S]*?<\/script>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim()
+            : '',
         }).catch(e => console.error('[notify] new ticket:', e.message));
       }
     }).catch(e => console.error('[notify] new ticket setting:', e.message));

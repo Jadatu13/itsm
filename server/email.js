@@ -216,10 +216,14 @@ function esc(str) {
 
 function stripTags(html) {
   return String(html || '')
-    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, ' ')   // remove style blocks entirely
-    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, ' ') // remove script blocks entirely
-    .replace(/<[^>]+>/g, ' ')                           // strip remaining tags
-    .replace(/&nbsp;/g, ' ')                            // decode common entities
+    .replace(/<head[\s\S]*?<\/head>/gi, ' ')             // remove head block
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, ' ')    // remove style blocks
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, ' ')  // remove script blocks
+    .replace(/<!--\[if[\s\S]*?<!\[endif\]-->/gi, ' ')   // Outlook conditionals
+    .replace(/<!--[\s\S]*?-->/g, ' ')                    // HTML comments
+    .replace(/<\/?\w+:\w+[^>]*>/gi, ' ')                 // Office namespace tags (<o:p> etc)
+    .replace(/<[^>]+>/g, ' ')                            // strip remaining tags
+    .replace(/&nbsp;/g, ' ')                             // decode common entities
     .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
@@ -415,4 +419,4 @@ async function sendMentionNotification({ to, mentionedAgentName, authorName, ref
   await sendMail({ to, subject: `[${reference}] You were mentioned in an internal note`, html, text });
 }
 
-module.exports = { sendNewTicket, sendAgentReply, sendTicketResolved, sendAgentNotification, sendSlaBreachAlert, sendMentionNotification };
+module.exports = { sendNewTicket, sendAgentReply, sendTicketResolved, sendAgentNotification, sendSlaBreachAlert, sendMentionNotification, stripTags };

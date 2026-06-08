@@ -3,7 +3,7 @@ const router = express.Router();
 const path = require('path');
 const multer = require('multer');
 const db = require('../db');
-const { sendNewTicket, sendAgentReply, sendTicketResolved, sendAgentNotification, sendMentionNotification } = require('../email');
+const { sendNewTicket, sendAgentReply, sendTicketResolved, sendAgentNotification, sendMentionNotification, stripTags } = require('../email');
 const { runAutomations } = require('../automations');
 const requireAdmin = require('../middleware/requireAdmin');
 const { logAudit }  = require('../lib/audit');
@@ -209,9 +209,7 @@ router.post('/', async (req, res) => {
       firstName:   t.first_name,
       reference:   t.reference,
       subject:     t.subject,
-      description: t.description
-        ? t.description.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, ' ').replace(/<script[^>]*>[\s\S]*?<\/script>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim()
-        : '',
+      description: stripTags(t.description),
     });
 
     // Notify agent(s) of new ticket
@@ -227,9 +225,7 @@ router.post('/', async (req, res) => {
           ticketId:     t.id,
           ticketSubject: t.subject,
           contactName:  t.contact_name,
-          previewText:  t.description
-            ? t.description.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, ' ').replace(/<script[^>]*>[\s\S]*?<\/script>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim()
-            : '',
+          previewText:  stripTags(t.description),
         }).catch(e => console.error('[notify] new ticket:', e.message));
       }
     }).catch(e => console.error('[notify] new ticket setting:', e.message));
@@ -569,7 +565,7 @@ router.post('/:id/replies', upload.array('files', 10), async (req, res) => {
         if (!info.rows.length) return;
         const { reference, subject, assigned_to, contact_name } = info.rows[0];
         const recipients = await getRecipients(assigned_to);
-        const plainPreview = body.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, ' ').replace(/<script[^>]*>[\s\S]*?<\/script>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+        const plainPreview = stripTags(body);
         for (const rec of recipients) {
           sendAgentNotification({
             to:            rec.email,
@@ -589,7 +585,7 @@ router.post('/:id/replies', upload.array('files', 10), async (req, res) => {
     if (isInternal) {
       agentEmailEnabled().then(async enabled => {
         if (!enabled) return;
-        const plainBody = body.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, ' ').replace(/<script[^>]*>[\s\S]*?<\/script>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+        const plainBody = stripTags(body);
         const mentionMatches = plainBody.match(/@([A-Za-z][A-Za-z0-9 _-]{0,49})/g);
         if (!mentionMatches || !mentionMatches.length) return;
 

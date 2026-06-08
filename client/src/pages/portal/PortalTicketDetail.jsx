@@ -3,18 +3,7 @@ import { useParams, Link } from 'react-router-dom'
 import { portalFetch } from '../../utils/portalApi'
 import RichTextEditor from '../../components/RichTextEditor'
 import styles from './Portal.module.css'
-
-function sanitizeEmailHtml(html) {
-  if (!html) return ''
-  return html
-    .replace(/<head[\s\S]*?<\/head>/gi, '')
-    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-    .replace(/<!DOCTYPE[^>]*>/gi, '')
-    .replace(/<\/?(?:html|body)[^>]*>/gi, '')
-    .replace(/(<p[^>]*>\s*(?:<br\s*\/?>|&nbsp;|\s)*<\/p>\s*){3,}/gi, '<p></p>')
-    .trim()
-}
+import { sanitizeEmailHtml } from '../../utils/sanitizeHtml'
 
 function statusBadgeClass(status) {
   switch (status) {

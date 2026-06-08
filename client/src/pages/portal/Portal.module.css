@@ -504,16 +504,16 @@
 }
 
 .messageAgent {
-  background: var(--portal-card-bg);
-  border: 1px solid var(--portal-border);
-  color: var(--portal-text);
+  background: var(--portal-accent);
+  color: #fff;
   align-self: flex-start;
   border-bottom-left-radius: 4px;
 }
 
 .messageContact {
-  background: var(--portal-accent);
-  color: #fff;
+  background: var(--portal-card-bg);
+  border: 1px solid var(--portal-border);
+  color: var(--portal-text);
   align-self: flex-end;
   border-bottom-right-radius: 4px;
 }
@@ -546,10 +546,10 @@
 .messageBubble :global(table) { border-collapse: collapse; width: 100%; margin: 0.4em 0; font-size: 0.9em; }
 .messageBubble :global(td),.messageBubble :global(th) { border: 1px solid rgba(0,0,0,0.15); padding: 4px 8px; vertical-align: top; }
 .messageBubble :global(th) { background: rgba(0,0,0,0.06); font-weight: 700; }
-.messageContact :global(a) { color: #fff; }
-.messageContact :global(code) { background: rgba(255,255,255,0.15); }
-.messageContact :global(td),.messageContact :global(th) { border-color: rgba(255,255,255,0.3); }
-.messageContact :global(th) { background: rgba(255,255,255,0.12); }
+.messageAgent :global(a) { color: #fff; }
+.messageAgent :global(code) { background: rgba(255,255,255,0.15); }
+.messageAgent :global(td),.messageAgent :global(th) { border-color: rgba(255,255,255,0.3); }
+.messageAgent :global(th) { background: rgba(255,255,255,0.12); }
 
 .messageTime {
   font-size: 0.72rem;

@@ -153,7 +153,6 @@ function NewOrgModal({ onClose, onCreated }) {
     try {
       const res = await apiFetch('/api/organisations', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name }),
       })
       if (!res.ok) {
@@ -164,9 +163,8 @@ function NewOrgModal({ onClose, onCreated }) {
       }
       const org = await res.json()
       for (const domain of domains) {
-        await fetch(`/api/organisations/${org.id}/domains`, {
+        await apiFetch(`/api/organisations/${org.id}/domains`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ domain }),
         }).catch(() => {})
       }
@@ -248,9 +246,8 @@ function EditOrgModal({ org, onClose, onSaved }) {
     setNameError('')
     setSubmitting(true)
     try {
-      const res = await fetch(`/api/organisations/${org.id}`, {
+      const res = await apiFetch(`/api/organisations/${org.id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: name.trim() }),
       })
       if (res.ok) {
@@ -306,9 +303,8 @@ function DomainModal({ org, onClose }) {
     setAdding(true)
     setAddError(null)
     try {
-      const res = await fetch(`/api/organisations/${org.id}/domains`, {
+      const res = await apiFetch(`/api/organisations/${org.id}/domains`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ domain: cleaned }),
       })
       if (res.ok) {
@@ -327,7 +323,7 @@ function DomainModal({ org, onClose }) {
 
   async function handleRemove(domainId) {
     try {
-      await fetch(`/api/organisations/${org.id}/domains/${domainId}`, { method: 'DELETE' })
+      await apiFetch(`/api/organisations/${org.id}/domains/${domainId}`, { method: 'DELETE' })
       setDomains(d => d.filter(x => x.id !== domainId))
     } catch { /* ignore */ }
   }

@@ -71,17 +71,12 @@ export default function PortalTicketDetail() {
     setSending(true)
     setError('')
     try {
-      const token = sessionStorage.getItem('portal_preview_token') || localStorage.getItem('portal_token')
       let res
       if (pendingFiles.length > 0) {
         const fd = new FormData()
         fd.append('body', replyBody)
         pendingFiles.forEach(f => fd.append('files', f))
-        res = await fetch(`/api/portal/tickets/${id}/reply`, {
-          method: 'POST',
-          headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-          body: fd,
-        })
+        res = await portalFetch(`/api/portal/tickets/${id}/reply`, { method: 'POST', body: fd })
       } else {
         res = await portalFetch(`/api/portal/tickets/${id}/reply`, {
           method: 'POST',

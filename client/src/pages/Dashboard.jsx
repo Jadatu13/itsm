@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import PageHeader from '../components/PageHeader'
 import { StatusBadge, PriorityBadge } from '../components/Badge'
-import { formatDate, timeAgo } from '../utils/format'
+import { timeAgo } from '../utils/format'
 import { apiFetch } from '../utils/api'
 import styles from './Dashboard.module.css'
 

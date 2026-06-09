@@ -1,7 +1,7 @@
-import { useEffect, useState, useRef, useCallback, Fragment } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import PageHeader from '../components/PageHeader'
-import { StatusBadge, PriorityBadge, CategoryBadge, SourceBadge, CATEGORY_OPTIONS, SOURCE_OPTIONS } from '../components/Badge'
+import { PriorityBadge, CategoryBadge, SourceBadge, CATEGORY_OPTIONS, SOURCE_OPTIONS } from '../components/Badge'
 import Modal from '../components/Modal'
 import ConfirmModal from '../components/ConfirmModal'
 import ContactSelect from '../components/ContactSelect'
@@ -115,12 +115,7 @@ export default function TicketDetail() {
       fd.append('is_agent_reply', 'true')
       fd.append('is_internal', isInternal ? 'true' : 'false')
       pendingFiles.forEach(f => fd.append('files', f))
-      const token = localStorage.getItem('token') || sessionStorage.getItem('token')
-      res = await fetch(`/api/tickets/${id}/replies`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-        body: fd,
-      })
+      res = await apiFetch(`/api/tickets/${id}/replies`, { method: 'POST', body: fd })
     } else {
       res = await apiFetch(`/api/tickets/${id}/replies`, {
         method: 'POST',

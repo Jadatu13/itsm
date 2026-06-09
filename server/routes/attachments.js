@@ -5,7 +5,7 @@ const fs      = require('fs');
 const db      = require('../db');
 const { sign, verify } = require('../lib/secret');
 
-const UPLOAD_DIR = '/data/uploads';
+const UPLOAD_DIR = process.env.UPLOAD_DIR || '/data/uploads';
 
 // MIME types we are willing to render inline (everything else is force-downloaded
 // so a malicious uploaded .html/.svg can never execute on our origin).

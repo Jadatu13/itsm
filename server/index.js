@@ -146,7 +146,7 @@ app.listen(PORT, async () => {
   // Ensure uploads directory exists
   try {
     const fs = require('fs');
-    const uploadsDir = '/data/uploads';
+    const uploadsDir = process.env.UPLOAD_DIR || '/data/uploads';
     if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
   } catch (err) {
     console.error('[uploads] Could not create uploads dir:', err.message);

@@ -8,8 +8,13 @@ const { runAutomations } = require('../automations');
 const requireAdmin = require('../middleware/requireAdmin');
 const { logAudit }  = require('../lib/audit');
 
+const UPLOAD_DIR = process.env.UPLOAD_DIR || '/data/uploads';
+// Ensure the directory exists at load time (multer's diskStorage needs it).
+try { require('fs').mkdirSync(UPLOAD_DIR, { recursive: true }); } catch (e) {
+  console.error('[uploads] Could not ensure upload dir:', e.message);
+}
 const storage = multer.diskStorage({
-  destination: '/data/uploads',
+  destination: UPLOAD_DIR,
   filename: (req, file, cb) => {
     const { randomUUID } = require('crypto');
     cb(null, `${randomUUID()}${path.extname(file.originalname)}`);

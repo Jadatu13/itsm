@@ -129,7 +129,7 @@ async function saveAttachments(parsedAttachments, ticketId, replyId, htmlBody) {
     if (!att.content || att.content.length < 100) continue;
     const ext = path.extname(att.filename || '') || '';
     const storedName = `${randomUUID()}${ext}`;
-    fs.writeFileSync(path.join('/data/uploads', storedName), att.content);
+    fs.writeFileSync(path.join(process.env.UPLOAD_DIR || '/data/uploads', storedName), att.content);
     const saved = await db.query(
       `INSERT INTO ticket_attachments (ticket_id, reply_id, filename, original_name, mime_type, size_bytes)
        VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,

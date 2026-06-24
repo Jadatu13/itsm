@@ -70,6 +70,12 @@ export default function Settings() {
   const [totpMsg, setTotpMsg]             = useState(null)
   const [totpWorking, setTotpWorking]     = useState(false)
 
+  // ── Sign-in methods state ──────────────────────────────────────────────────
+  const [authCfg, setAuthCfg]         = useState({ password_login_enabled: true, sso_configured: false, env_override: null })
+  const [authLoading, setAuthLoading] = useState(true)
+  const [authSaving, setAuthSaving]   = useState(false)
+  const [authMsg, setAuthMsg]         = useState(null)
+
   // ── Inbound (IMAP) state ──────────────────────────────────────────────────
   const [inbound, setInbound] = useState({
     imap_host:          '',
@@ -178,6 +184,34 @@ export default function Settings() {
       .then(d => { if (d) setTotpEnabled(d.totp_enabled); setTotpLoading(false) })
       .catch(() => setTotpLoading(false))
   }, [])
+
+  useEffect(() => {
+    apiFetch('/api/settings/auth')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setAuthCfg(d); setAuthLoading(false) })
+      .catch(() => setAuthLoading(false))
+  }, [])
+
+  async function handleTogglePasswordLogin(nextEnabled) {
+    setAuthSaving(true)
+    setAuthMsg(null)
+    try {
+      const res = await apiFetch('/api/settings/auth', {
+        method: 'PUT',
+        body: JSON.stringify({ password_login_enabled: nextEnabled }),
+      })
+      const d = await res.json()
+      if (res.ok) {
+        setAuthCfg(d)
+        setAuthMsg({ ok: true, text: nextEnabled ? 'Email/password sign-in enabled.' : 'Email/password sign-in disabled.' })
+      } else {
+        setAuthMsg({ ok: false, text: d.error || 'Failed to update sign-in settings.' })
+      }
+    } catch {
+      setAuthMsg({ ok: false, text: 'Something went wrong.' })
+    }
+    setAuthSaving(false)
+  }
 
   async function handle2faSetup() {
     setTotpWorking(true)
@@ -493,6 +527,81 @@ export default function Settings() {
                     {totpWorking ? 'Setting up…' : 'Enable 2FA'}
                   </button>
                 </div>
+              </>
+            )}
+          </div>
+        </section>
+
+        {/* ── Sign-in Methods ───────────────────────── */}
+        <section className={styles.section}>
+          <div className={styles.sectionHead}>
+            <div>
+              <h2 className={styles.sectionTitle}>Sign-in Methods</h2>
+              <p className={styles.sectionDesc}>
+                Control how agents sign in. You can turn off email/password sign-in once Microsoft
+                SSO is working, so only Microsoft accounts can access the console.
+              </p>
+            </div>
+            {!authLoading && (
+              <span className={authCfg.password_login_enabled ? styles.badgeOn : styles.badgeOff}>
+                {authCfg.password_login_enabled ? '● Password on' : '○ Password off'}
+              </span>
+            )}
+          </div>
+          <div className={styles.card}>
+            {authLoading ? (
+              <p className={styles.msgWarn}>Loading…</p>
+            ) : (
+              <>
+                <p style={{ margin: 0, fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                  <strong>Email &amp; password sign-in</strong> is currently{' '}
+                  <strong>{authCfg.password_login_enabled ? 'enabled' : 'disabled'}</strong>.
+                  {' '}Microsoft SSO is {authCfg.sso_configured
+                    ? 'configured and always available.'
+                    : 'not configured yet.'}
+                </p>
+
+                {authCfg.env_override && (
+                  <p className={styles.msgWarn} style={{ marginTop: 4 }}>
+                    ⚠ A <code>PASSWORD_LOGIN_OVERRIDE={authCfg.env_override}</code> environment
+                    variable is set, which forces password sign-in {authCfg.env_override === 'on' ? 'ON' : 'OFF'}{' '}
+                    regardless of this toggle. Remove it to control the setting from here.
+                  </p>
+                )}
+
+                {!authCfg.sso_configured && (
+                  <p className={styles.msgWarn} style={{ marginTop: 4 }}>
+                    You can&apos;t disable password sign-in until Microsoft SSO is configured —
+                    otherwise no one could log in.
+                  </p>
+                )}
+
+                {authMsg && <p className={authMsg.ok ? styles.msgOk : styles.msgErr}>{authMsg.ok ? '✓ ' : '✕ '}{authMsg.text}</p>}
+
+                <div style={{ marginTop: 4 }}>
+                  {authCfg.password_login_enabled ? (
+                    <button
+                      className={formStyles.btnSecondary}
+                      onClick={() => handleTogglePasswordLogin(false)}
+                      disabled={authSaving || !authCfg.sso_configured || authCfg.env_override === 'on'}
+                    >
+                      {authSaving ? 'Saving…' : 'Disable password sign-in'}
+                    </button>
+                  ) : (
+                    <button
+                      className={formStyles.btnPrimary}
+                      onClick={() => handleTogglePasswordLogin(true)}
+                      disabled={authSaving || authCfg.env_override === 'off'}
+                    >
+                      {authSaving ? 'Saving…' : 'Enable password sign-in'}
+                    </button>
+                  )}
+                </div>
+
+                <p style={{ margin: '8px 0 0', fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                  Locked out? Set <code>PASSWORD_LOGIN_OVERRIDE=on</code> in your environment and
+                  restart to force password sign-in back on.
+                </p>
               </>
             )}
           </div>

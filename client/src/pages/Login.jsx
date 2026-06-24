@@ -10,6 +10,7 @@ export default function Login() {
   const [code, setCode]           = useState('')
   const [verifying, setVerifying] = useState(false)
   const [ssoEnabled, setSsoEnabled] = useState(false)
+  const [passwordEnabled, setPasswordEnabled] = useState(true)
   const [email, setEmail]         = useState('')
   const [password, setPassword]   = useState('')
   const [signingIn, setSigningIn] = useState(false)
@@ -21,7 +22,10 @@ export default function Login() {
   useEffect(() => {
     fetch('/api/auth/config')
       .then(r => r.json())
-      .then(cfg => setSsoEnabled(!!cfg.ssoEnabled))
+      .then(cfg => {
+        setSsoEnabled(!!cfg.ssoEnabled)
+        setPasswordEnabled(cfg.passwordEnabled !== false)
+      })
       .catch(() => {})
   }, [])
 
@@ -186,45 +190,55 @@ export default function Login() {
         </div>
 
         <h1 className={styles.title}>Sign in</h1>
-        <p className={styles.subtitle}>Enter your email and password to continue.</p>
+        <p className={styles.subtitle}>
+          {passwordEnabled
+            ? 'Enter your email and password to continue.'
+            : 'Use your Microsoft account to continue.'}
+        </p>
 
         {error && <div className={styles.error}>{error}</div>}
 
-        <form onSubmit={handlePasswordSubmit} className={styles.form}>
-          <input
-            type="email"
-            className={styles.input}
-            placeholder="Email"
-            value={email}
-            onChange={e => setEmail(e.target.value)}
-            autoComplete="username"
-            autoFocus
-          />
-          <input
-            type="password"
-            className={styles.input}
-            placeholder="Password"
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-            autoComplete="current-password"
-          />
-          <button
-            type="submit"
-            className={styles.primaryBtn}
-            disabled={signingIn || !email.trim() || !password}
-          >
-            {signingIn ? 'Signing in…' : 'Sign in'}
-          </button>
-        </form>
+        {passwordEnabled && (
+          <form onSubmit={handlePasswordSubmit} className={styles.form}>
+            <input
+              type="email"
+              className={styles.input}
+              placeholder="Email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              autoComplete="username"
+              autoFocus
+            />
+            <input
+              type="password"
+              className={styles.input}
+              placeholder="Password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              autoComplete="current-password"
+            />
+            <button
+              type="submit"
+              className={styles.primaryBtn}
+              disabled={signingIn || !email.trim() || !password}
+            >
+              {signingIn ? 'Signing in…' : 'Sign in'}
+            </button>
+          </form>
+        )}
 
         {ssoEnabled && (
           <>
-            <div className={styles.divider}><span>or</span></div>
+            {passwordEnabled && <div className={styles.divider}><span>or</span></div>}
             <a href="/api/auth/azure/login" className={styles.msBtn}>
               <MicrosoftLogo />
               Sign in with Microsoft
             </a>
           </>
+        )}
+
+        {!passwordEnabled && !ssoEnabled && (
+          <div className={styles.error}>No sign-in method is available. Contact your administrator.</div>
         )}
       </div>
     </div>

@@ -16,6 +16,27 @@ const AZURE_TENANT_ID     = process.env.AZURE_TENANT_ID;
 const APP_URL             = (process.env.APP_URL || 'http://localhost:8080').replace(/\/$/, '');
 const REDIRECT_URI        = `${APP_URL}/api/auth/azure/callback`;
 
+const ssoConfigured = () => !!(AZURE_CLIENT_ID && AZURE_TENANT_ID);
+
+// Whether email/password login is currently allowed.
+//
+//  - PASSWORD_LOGIN_OVERRIDE env is the break-glass lever and wins over the DB:
+//      'on'/'true'  → force-enabled  (use this to recover if you get locked out)
+//      'off'/'false'→ force-disabled
+//  - Otherwise the admin-controlled DB setting `auth_password_login` applies
+//    (default: enabled).
+async function passwordLoginEnabled() {
+  const override = (process.env.PASSWORD_LOGIN_OVERRIDE || '').toLowerCase().trim();
+  if (override === 'on'  || override === 'true')  return true;
+  if (override === 'off' || override === 'false') return false;
+  try {
+    const r = await db.query(`SELECT value FROM settings WHERE key = 'auth_password_login'`);
+    return r.rows.length === 0 ? true : r.rows[0].value !== 'false';
+  } catch {
+    return true; // never lock out on a transient DB error
+  }
+}
+
 // GET /api/auth/azure/login  — redirects browser to Microsoft login
 router.get('/azure/login', (req, res) => {
   if (!AZURE_CLIENT_ID || !AZURE_TENANT_ID) {
@@ -113,6 +134,10 @@ router.get('/azure/callback', async (req, res) => {
 
 // POST /api/auth/login — email + password login (fallback when SSO is not used)
 router.post('/login', async (req, res) => {
+  if (!(await passwordLoginEnabled())) {
+    return res.status(403).json({ error: 'Password sign-in is disabled. Please sign in with Microsoft.' });
+  }
+
   const email    = (req.body.email || '').toLowerCase().trim();
   const password = req.body.password || '';
   if (!email || !password) {
@@ -161,10 +186,10 @@ router.get('/me', requireAuth, (req, res) => {
 });
 
 // GET /api/auth/config  — tells the frontend which login methods are available
-router.get('/config', (req, res) => {
+router.get('/config', async (req, res) => {
   res.json({
-    ssoEnabled: !!(AZURE_CLIENT_ID && AZURE_TENANT_ID),
-    passwordEnabled: true,
+    ssoEnabled: ssoConfigured(),
+    passwordEnabled: await passwordLoginEnabled(),
   });
 });
 

@@ -399,4 +399,65 @@ router.put('/notifications', requireAdmin, async (req, res) => {
   }
 });
 
+// ─── GET /api/settings/auth — sign-in method config ───────────────────────────
+
+function ssoConfigured() {
+  return !!(process.env.AZURE_CLIENT_ID && process.env.AZURE_TENANT_ID);
+}
+function passwordOverride() {
+  const o = (process.env.PASSWORD_LOGIN_OVERRIDE || '').toLowerCase().trim();
+  if (o === 'on'  || o === 'true')  return 'on';
+  if (o === 'off' || o === 'false') return 'off';
+  return null;
+}
+
+router.get('/auth', async (req, res) => {
+  try {
+    const r = await db.query(`SELECT value FROM settings WHERE key = 'auth_password_login'`);
+    const dbEnabled = r.rows.length === 0 ? true : r.rows[0].value !== 'false';
+    const override  = passwordOverride();
+    res.json({
+      // Effective state takes the env override into account.
+      password_login_enabled: override ? override === 'on' : dbEnabled,
+      sso_configured:         ssoConfigured(),
+      env_override:           override,           // 'on' | 'off' | null
+    });
+  } catch (err) {
+    console.error('[settings/auth]', err.message);
+    res.status(500).json({ error: 'Failed to load sign-in settings' });
+  }
+});
+
+// ─── PUT /api/settings/auth ────────────────────────────────────────────────────
+
+router.put('/auth', requireAdmin, async (req, res) => {
+  const enable = !(req.body.password_login_enabled === false || req.body.password_login_enabled === 'false');
+
+  // Lock-out guard: don't allow disabling password login unless there's another
+  // way in (SSO configured). The PASSWORD_LOGIN_OVERRIDE env var can still force
+  // either state regardless of this setting.
+  if (!enable && !ssoConfigured()) {
+    return res.status(400).json({
+      error: 'Cannot disable password sign-in: Microsoft SSO is not configured, so you would be locked out. Set up SSO (AZURE_* env vars) first.',
+    });
+  }
+
+  try {
+    await db.query(
+      `INSERT INTO settings (key, value) VALUES ('auth_password_login', $1)
+       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+      [enable ? 'true' : 'false']
+    );
+    const override = passwordOverride();
+    res.json({
+      password_login_enabled: override ? override === 'on' : enable,
+      sso_configured:         ssoConfigured(),
+      env_override:           override,
+    });
+  } catch (err) {
+    console.error('[settings/auth]', err.message);
+    res.status(500).json({ error: 'Failed to save sign-in settings' });
+  }
+});
+
 module.exports = router;

@@ -31,12 +31,14 @@ services:
       NODE_ENV:        production
       # Restrict to your real front-end origin in production (avoid "*").
       CLIENT_URL:      ${CLIENT_URL:-*}
-      # ── JWT signing secret — REQUIRED. The app will refuse to start without it. ──
+      # ── JWT signing secret — REQUIRED. The server refuses to start without a ──
+      # strong value (enforced at runtime in server/lib/secret.js). Set this in
+      # your .env (or Coolify Environment Variables) before deploying.
       # Generate: node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
-      JWT_SECRET:      ${JWT_SECRET:?JWT_SECRET must be set in .env — generate with: node -e \"console.log(require('crypto').randomBytes(48).toString('hex'))\"}
+      JWT_SECRET:      ${JWT_SECRET:-}
       # ── Encryption key — REQUIRED to protect stored SMTP/IMAP/AI/M365 secrets ──
       # Generate: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-      ENCRYPTION_KEY:  ${ENCRYPTION_KEY:?ENCRYPTION_KEY must be set in .env — generate with: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"}
+      ENCRYPTION_KEY:  ${ENCRYPTION_KEY:-}
       # ── Microsoft Entra ID SSO ─────────────────────────────────────────────
       AZURE_TENANT_ID:     ${AZURE_TENANT_ID:-}
       AZURE_CLIENT_ID:     ${AZURE_CLIENT_ID:-}

@@ -40,8 +40,13 @@ router.post('/auth/request-link', loginLimiter, async (req, res) => {
       );
       const link = `${APP_URL}/portal/login?token=${encodeURIComponent(magicToken)}`;
       // Fire-and-forget; never reveal send success/failure to the caller.
+      // Logged server-side only so admins can diagnose delivery issues.
+      console.log(`[portal] request-link: sending magic link to ${contact.email} (contact #${contact.id})`);
       sendMagicLink({ to: contact.email, firstName: contact.first_name, link })
+        .then(() => console.log(`[portal] request-link: magic link handed to SMTP for ${contact.email}`))
         .catch(e => console.error('[portal] magic link send failed:', e.message));
+    } else {
+      console.warn(`[portal] request-link: no contact matches "${email}" — no email sent`);
     }
     res.json(GENERIC);
   } catch (err) {

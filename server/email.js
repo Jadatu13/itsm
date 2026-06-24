@@ -43,9 +43,19 @@ async function getConfig() {
 
 // ─── Low-level send ───────────────────────────────────────────────────────────
 
+// Strip CR/LF (and surrounding whitespace) from header-bound values to prevent
+// SMTP header injection via untrusted ticket subjects / recipient addresses.
+function headerSafe(value) {
+  return String(value ?? '').replace(/[\r\n]+/g, ' ').trim();
+}
+
 async function sendMail({ to, subject, html, text, replyTo }) {
   const config = await getConfig();
   if (!config) return;
+
+  to      = headerSafe(to);
+  subject = headerSafe(subject);
+  replyTo = replyTo ? headerSafe(replyTo) : replyTo;
 
   const transporter = nodemailer.createTransport({
     host:   config.host,
@@ -176,6 +186,34 @@ async function sendAgentReply({ to, firstName, reference, ticketSubject, replyBo
     subject: `[${reference}] New reply on your support request`,
     html,
     text: `Hi ${firstName},\n\nA support agent has replied to your request (${reference}):\n\n${stripTags(replyBody)}\n\nView your request: ${APP_URL}/portal/tickets/${reference}\n\nOr reply to this email to respond.`,
+  });
+}
+
+async function sendMagicLink({ to, firstName, link }) {
+  const html = layout({
+    headerColour: '#4F46E5',
+    title:     'Your sign-in link',
+    reference: 'Help Centre',
+    canReply:  false,
+    body: `
+      <p style="margin:0 0 16px;color:#374151;font-size:15px;">Hi ${esc(firstName || 'there')},</p>
+      <p style="margin:0 0 20px;color:#6b7280;font-size:14px;line-height:1.6;">
+        Click the button below to sign in to the Help Centre. This link is valid for
+        <strong>15 minutes</strong> and can only be used once.
+      </p>
+      <div style="text-align:center;margin:24px 0 4px;">
+        <a href="${link}" style="display:inline-block;background:#4F46E5;color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;padding:11px 28px;border-radius:7px;">Sign in to the Help Centre</a>
+      </div>
+      <p style="margin:18px 0 0;color:#9ca3af;font-size:12px;line-height:1.5;">
+        If you didn't request this, you can safely ignore this email — no one can access
+        your account without this link.
+      </p>`,
+  });
+  await sendMail({
+    to,
+    subject: 'Your Help Centre sign-in link',
+    html,
+    text: `Hi ${firstName || 'there'},\n\nSign in to the Help Centre using this link (valid 15 minutes, one-time use):\n\n${link}\n\nIf you didn't request this, you can ignore this email.`,
   });
 }
 
@@ -419,4 +457,4 @@ async function sendMentionNotification({ to, mentionedAgentName, authorName, ref
   await sendMail({ to, subject: `[${reference}] You were mentioned in an internal note`, html, text });
 }
 
-module.exports = { sendNewTicket, sendAgentReply, sendTicketResolved, sendAgentNotification, sendSlaBreachAlert, sendMentionNotification, stripTags };
+module.exports = { sendNewTicket, sendAgentReply, sendTicketResolved, sendAgentNotification, sendSlaBreachAlert, sendMentionNotification, sendMagicLink, stripTags };

@@ -124,9 +124,21 @@ router.delete('/:id', requireAdmin, async (req, res) => {
       `SELECT id, first_name || ' ' || last_name AS full_name, email FROM contacts WHERE id=$1`, [req.params.id]
     );
     const old = before.rows[0];
-    await db.query('UPDATE tickets SET contact_id = NULL WHERE contact_id = $1', [req.params.id]);
-    await db.query('UPDATE service_requests SET contact_id = NULL WHERE contact_id = $1', [req.params.id]).catch(() => {});
-    const result = await db.query('DELETE FROM contacts WHERE id = $1 RETURNING id', [req.params.id]);
+    // Preserve ticket/request history by nulling the FK, then delete — atomically.
+    const client = await db.connect();
+    let result;
+    try {
+      await client.query('BEGIN');
+      await client.query('UPDATE tickets SET contact_id = NULL WHERE contact_id = $1', [req.params.id]);
+      await client.query('UPDATE service_requests SET contact_id = NULL WHERE contact_id = $1', [req.params.id]);
+      result = await client.query('DELETE FROM contacts WHERE id = $1 RETURNING id', [req.params.id]);
+      await client.query('COMMIT');
+    } catch (txErr) {
+      await client.query('ROLLBACK');
+      throw txErr;
+    } finally {
+      client.release();
+    }
     if (!result.rows.length) return res.status(404).json({ error: 'Contact not found' });
     if (old) {
       logAudit({ req, action: 'contact.deleted', entityType: 'contact', entityId: old.id,
@@ -198,18 +210,19 @@ router.get('/:id/activity', async (req, res) => {
     // Ticket replies (via tickets joined on contact_id)
     const repliesResult = await db.query(
       `SELECT
-        r.id, r.body, r.created_at, r.is_internal, r.sender_name,
+        r.id, r.body, r.created_at, r.is_internal, r.is_agent_reply, r.sender_name,
         t.id AS ticket_id, t.reference
        FROM ticket_replies r
        JOIN tickets t ON t.id = r.ticket_id
-       WHERE t.contact_id = $1
+       WHERE t.contact_id = $1 AND r.is_internal = false
        ORDER BY r.created_at DESC`,
       [contactId]
     );
 
     for (const r of repliesResult.rows) {
-      // Determine direction: if sender_name is set it came from contact (email in), otherwise agent
-      const fromContact = r.sender_name && r.sender_name !== '';
+      // Direction is authoritative via is_agent_reply, not the presence of
+      // sender_name (agents and automations also set sender_name).
+      const fromContact = !r.is_agent_reply;
       events.push({
         type:        fromContact ? 'reply_from_contact' : 'reply_from_agent',
         timestamp:   r.created_at,
@@ -275,9 +288,20 @@ router.post('/:id/merge', async (req, res) => {
       `SELECT id, first_name || ' ' || last_name AS full_name, email FROM contacts WHERE id=$1`, [sourceId]
     );
     const old = before.rows[0];
-    await db.query('UPDATE tickets SET contact_id = $1 WHERE contact_id = $2', [target_id, sourceId]);
-    await db.query('UPDATE service_requests SET contact_id = $1 WHERE contact_id = $2', [target_id, sourceId]).catch(() => {});
-    await db.query('DELETE FROM contacts WHERE id = $1', [sourceId]);
+    // Reassign all child rows then delete the source — atomically.
+    const client = await db.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('UPDATE tickets SET contact_id = $1 WHERE contact_id = $2', [target_id, sourceId]);
+      await client.query('UPDATE service_requests SET contact_id = $1 WHERE contact_id = $2', [target_id, sourceId]);
+      await client.query('DELETE FROM contacts WHERE id = $1', [sourceId]);
+      await client.query('COMMIT');
+    } catch (txErr) {
+      await client.query('ROLLBACK');
+      throw txErr;
+    } finally {
+      client.release();
+    }
     logAudit({ req, action: 'contact.merged', entityType: 'contact', entityId: parseInt(sourceId),
       oldValue: { full_name: old?.full_name, email: old?.email },
       newValue: { merged_into: parseInt(target_id) } }).catch(() => {});

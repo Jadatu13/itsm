@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { portalFetch } from '../../utils/portalApi'
+import { sanitizeHtml } from '../../utils/sanitizeHtml'
 import styles from './Portal.module.css'
 
 export default function PortalArticle() {
@@ -38,7 +39,7 @@ export default function PortalArticle() {
         </h1>
         <div
           className={styles.articleBody}
-          dangerouslySetInnerHTML={{ __html: article.body }}
+          dangerouslySetInnerHTML={{ __html: sanitizeHtml(article.body) }}
         />
       </div>
 

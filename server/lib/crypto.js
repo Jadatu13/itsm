@@ -45,7 +45,16 @@ function encrypt(text) {
   if (!text) return null;
 
   const key = getKey();
-  if (!key) return `plain:${text}`;
+  if (!key) {
+    // Never silently store secrets in cleartext in production.
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error(
+        '[crypto] Refusing to store a secret without ENCRYPTION_KEY set. ' +
+        'Set a 64-char hex ENCRYPTION_KEY in the environment.'
+      );
+    }
+    return `plain:${text}`;
+  }
 
   const iv = crypto.randomBytes(12);
   const cipher = crypto.createCipheriv(ALGORITHM, key, iv);

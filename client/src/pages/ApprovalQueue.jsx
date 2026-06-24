@@ -96,7 +96,7 @@ function resolveFieldValues(rawValues, formFields) {
     .map(({ label, value }) => ({ label, value: String(value) }))
 }
 
-function RequestCard({ request, onApprove, onReject, onRerun, onRefresh }) {
+function RequestCard({ request, onApprove, onReject, onRerun }) {
   const [expanded, setExpanded] = useState(false)
   const [approving, setApproving] = useState(false)
   const [rerunning, setRerunning] = useState(false)

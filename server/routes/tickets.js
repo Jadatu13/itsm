@@ -8,14 +8,26 @@ const { runAutomations } = require('../automations');
 const requireAdmin = require('../middleware/requireAdmin');
 const { logAudit }  = require('../lib/audit');
 
+const UPLOAD_DIR = process.env.UPLOAD_DIR || '/data/uploads';
+// Ensure the directory exists at load time (multer's diskStorage needs it).
+try { require('fs').mkdirSync(UPLOAD_DIR, { recursive: true }); } catch (e) {
+  console.error('[uploads] Could not ensure upload dir:', e.message);
+}
 const storage = multer.diskStorage({
-  destination: '/data/uploads',
+  destination: UPLOAD_DIR,
   filename: (req, file, cb) => {
     const { randomUUID } = require('crypto');
     cb(null, `${randomUUID()}${path.extname(file.originalname)}`);
   },
 });
 const upload = multer({ storage, limits: { fileSize: 25 * 1024 * 1024 } });
+
+// Escape user-supplied text before embedding in stored HTML (e.g. merge notes).
+function esc(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
 
 // GET /api/tickets
 // status=active  → all non-resolved (default in UI)
@@ -245,14 +257,22 @@ router.put('/:id', async (req, res) => {
     const SLA_HOURS = await getSlaHours();
     const p = priority || 'low';
     const slaHours = SLA_HOURS[p] ?? 72;
+
+    // Only recompute the SLA due date when the priority actually changes —
+    // editing the subject/description should not silently move the deadline.
+    const cur = await db.query('SELECT priority FROM tickets WHERE id = $1', [req.params.id]);
+    if (!cur.rows.length) return res.status(404).json({ error: 'Ticket not found' });
+    const priorityChanged = cur.rows[0].priority !== p;
+
     const update = await db.query(
       `UPDATE tickets
        SET subject = $1, description = $2, contact_id = $3,
            priority = $4, category = $5, source = $6,
-           sla_due_at = created_at + ($7 || ' hours')::INTERVAL,
+           sla_due_at = CASE WHEN $7 THEN created_at + ($8 || ' hours')::INTERVAL ELSE sla_due_at END,
+           sla_alerted = CASE WHEN $7 AND (created_at + ($8 || ' hours')::INTERVAL) > NOW() THEN false ELSE sla_alerted END,
            updated_at = NOW()
-       WHERE id = $8 RETURNING id`,
-      [subject, description, contact_id, p, category || null, source || 'manual', slaHours, req.params.id]
+       WHERE id = $9 RETURNING id`,
+      [subject, description, contact_id, p, category || null, source || 'manual', priorityChanged, slaHours, req.params.id]
     );
     if (!update.rows.length) return res.status(404).json({ error: 'Ticket not found' });
     const ticket = await db.query(
@@ -413,32 +433,47 @@ router.post('/:id/merge', async (req, res) => {
     if (!srcResult.rows.length) return res.status(404).json({ error: 'Source ticket not found' });
     const src = srcResult.rows[0];
 
-    // Move all replies from source to target
-    await db.query('UPDATE ticket_replies SET ticket_id = $1 WHERE ticket_id = $2', [target_id, sourceId]);
+    // Confirm the target exists before we start mutating.
+    const tgt = await db.query('SELECT id FROM tickets WHERE id = $1', [target_id]);
+    if (!tgt.rows.length) return res.status(404).json({ error: 'Target ticket not found' });
 
-    // Post an internal note on the target summarising what was merged in
     const agentName = req.agent?.name || 'An agent';
     const noteLines = [
-      `<p><strong>${agentName} merged ${src.reference} into this ticket.</strong></p>`,
-      `<p><strong>Subject:</strong> ${src.subject}</p>`,
-      src.contact_name ? `<p><strong>Contact:</strong> ${src.contact_name} (${src.contact_email})</p>` : null,
-      src.priority     ? `<p><strong>Priority:</strong> ${src.priority}</p>` : null,
-      src.category     ? `<p><strong>Category:</strong> ${src.category}</p>` : null,
-      src.description  ? `<hr/><p>${src.description.replace(/\n/g, '<br>')}</p>` : null,
+      `<p><strong>${esc(agentName)} merged ${esc(src.reference)} into this ticket.</strong></p>`,
+      `<p><strong>Subject:</strong> ${esc(src.subject)}</p>`,
+      src.contact_name ? `<p><strong>Contact:</strong> ${esc(src.contact_name)} (${esc(src.contact_email)})</p>` : null,
+      src.priority     ? `<p><strong>Priority:</strong> ${esc(src.priority)}</p>` : null,
+      src.category     ? `<p><strong>Category:</strong> ${esc(src.category)}</p>` : null,
+      src.description  ? `<hr/><p>${esc(src.description).replace(/\n/g, '<br>')}</p>` : null,
     ].filter(Boolean).join('');
 
-    await db.query(
-      `INSERT INTO ticket_replies (ticket_id, body, is_agent_reply, is_internal, sender_name)
-       VALUES ($1, $2, true, true, 'System')`,
-      [target_id, noteLines]
-    );
-
-    // Delete the source ticket (cascade removes any remaining replies)
-    await db.query('DELETE FROM tickets WHERE id = $1', [sourceId]);
+    // Do the whole merge atomically so a mid-way failure can't half-merge.
+    const client = await db.connect();
+    try {
+      await client.query('BEGIN');
+      // Re-point all child rows from source → target (replies, attachments, time entries)
+      await client.query('UPDATE ticket_replies   SET ticket_id = $1 WHERE ticket_id = $2', [target_id, sourceId]);
+      await client.query('UPDATE ticket_attachments SET ticket_id = $1 WHERE ticket_id = $2', [target_id, sourceId]);
+      await client.query('UPDATE ticket_time_entries SET ticket_id = $1 WHERE ticket_id = $2', [target_id, sourceId]);
+      // Summary note on the target
+      await client.query(
+        `INSERT INTO ticket_replies (ticket_id, body, is_agent_reply, is_internal, sender_name)
+         VALUES ($1, $2, true, true, 'System')`,
+        [target_id, noteLines]
+      );
+      // Delete the now-empty source ticket
+      await client.query('DELETE FROM tickets WHERE id = $1', [sourceId]);
+      await client.query('COMMIT');
+    } catch (txErr) {
+      await client.query('ROLLBACK');
+      throw txErr;
+    } finally {
+      client.release();
+    }
 
     res.json({ success: true });
   } catch (err) {
-    console.error(err);
+    console.error('[tickets] merge failed:', err.message);
     res.status(500).json({ error: 'Failed to merge tickets' });
   }
 });

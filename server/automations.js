@@ -111,6 +111,15 @@ async function executeAction(action, ticket, conn) {
 async function runAutomations(ticket, trigger, context = {}) {
   const conn = context.db || db;
 
+  // Tickets relate to an organisation only via their contact. Enrich the ticket
+  // with org_id so org-based automation conditions can actually match.
+  if (ticket && ticket.org_id === undefined && ticket.contact_id) {
+    try {
+      const r = await conn.query('SELECT organisation_id FROM contacts WHERE id = $1', [ticket.contact_id]);
+      ticket = { ...ticket, org_id: r.rows[0]?.organisation_id ?? null };
+    } catch { /* non-fatal — org conditions just won't match */ }
+  }
+
   let automations;
   try {
     const result = await conn.query(

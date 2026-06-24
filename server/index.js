@@ -1,8 +1,11 @@
 require('dotenv').config();
 const express    = require('express');
 const cors       = require('cors');
+const helmet     = require('helmet');
+const rateLimit  = require('express-rate-limit');
 const bcrypt     = require('bcrypt');
 const db         = require('./db');
+const { runMigrations } = require('./db/migrate');
 const requireAuth = require('./middleware/auth');
 
 const ticketRoutes        = require('./routes/tickets');
@@ -31,11 +34,35 @@ const { startSlaMonitor } = require('./jobs/slaMonitor');
 const app  = express();
 const PORT = process.env.PORT || 3001;
 
-app.use(cors({ origin: process.env.CLIENT_URL || '*' }));
-app.use(express.json());
+// Behind nginx/Traefik — trust the proxy so rate-limit sees the real client IP.
+app.set('trust proxy', 1);
+
+// Security headers. CSP is disabled here (this is a JSON API; the SPA is served
+// separately by nginx) and CORP is relaxed so the front-end can embed images/
+// attachments when served from a different dev origin.
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+}));
+
+const corsOrigin = process.env.CLIENT_URL || '*';
+if (corsOrigin === '*') {
+  console.warn('[cors] CLIENT_URL is "*" — set it to your real front-end origin in production.');
+}
+app.use(cors({ origin: corsOrigin }));
+app.use(express.json({ limit: '1mb' }));
+
+// Throttle authentication endpoints (brute force / SSO-state abuse).
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests. Please wait a few minutes and try again.' },
+});
 
 // ── Public routes ─────────────────────────────────────────────────────────────
-app.use('/api/auth', authRoutes);
+app.use('/api/auth', authLimiter, authRoutes);
 
 // ── Protected routes ──────────────────────────────────────────────────────────
 app.use('/api/tickets',         requireAuth, ticketRoutes);
@@ -107,272 +134,42 @@ app.get('/api/dashboard/recent', requireAuth, async (req, res) => {
 app.listen(PORT, async () => {
   console.log(`ITSM server running on http://localhost:${PORT}`);
 
-  // ── Schema migrations (idempotent) ─────────────────────────────────────────
+  // ── Schema migrations (idempotent, fail-loud) ──────────────────────────────
   try {
-    await db.query(`
-      CREATE TABLE IF NOT EXISTS kb_folders (
-        id         SERIAL PRIMARY KEY,
-        name       TEXT NOT NULL,
-        icon       TEXT DEFAULT '📁',
-        sort_order INT  DEFAULT 0,
-        created_at TIMESTAMPTZ DEFAULT NOW()
-      )
-    `);
-    await db.query(`
-      ALTER TABLE kb_articles
-        ADD COLUMN IF NOT EXISTS folder_id INT REFERENCES kb_folders(id) ON DELETE SET NULL
-    `);
-    // Subfolder support
-    await db.query(`
-      ALTER TABLE kb_folders
-        ADD COLUMN IF NOT EXISTS parent_id INT REFERENCES kb_folders(id) ON DELETE SET NULL
-    `);
-    // Org-specific folder visibility
-    await db.query(`
-      ALTER TABLE kb_folders
-        ADD COLUMN IF NOT EXISTS org_id INT REFERENCES organisations(id) ON DELETE CASCADE
-    `);
-    // Article visibility: 'internal' (agents only) or 'public' (client portal)
-    await db.query(`
-      ALTER TABLE kb_articles
-        ADD COLUMN IF NOT EXISTS visibility TEXT NOT NULL DEFAULT 'internal'
-    `);
-    await db.query(`
-      ALTER TABLE ticket_replies
-        ADD COLUMN IF NOT EXISTS is_internal BOOLEAN DEFAULT false
-    `);
-    await db.query(`
-      ALTER TABLE ticket_replies
-        ADD COLUMN IF NOT EXISTS sender_name TEXT
-    `);
-    await db.query(`
-      CREATE TABLE IF NOT EXISTS service_request_forms (
-        id              SERIAL PRIMARY KEY,
-        name            TEXT NOT NULL,
-        description     TEXT,
-        icon            TEXT DEFAULT '📋',
-        category        TEXT DEFAULT 'general',
-        fields          JSONB NOT NULL DEFAULT '[]',
-        ticket_priority TEXT NOT NULL DEFAULT 'medium',
-        ticket_category TEXT,
-        ticket_subject_template TEXT,
-        enabled         BOOLEAN DEFAULT true,
-        sort_order      INT DEFAULT 0,
-        created_at      TIMESTAMPTZ DEFAULT NOW(),
-        updated_at      TIMESTAMPTZ DEFAULT NOW()
-      )
-    `);
-    await db.query(`
-      CREATE TABLE IF NOT EXISTS service_requests (
-        id           SERIAL PRIMARY KEY,
-        form_id      INT REFERENCES service_request_forms(id) ON DELETE SET NULL,
-        contact_id   INT REFERENCES contacts(id) ON DELETE CASCADE,
-        ticket_id    INT REFERENCES tickets(id) ON DELETE SET NULL,
-        form_name    TEXT,
-        field_values JSONB NOT NULL DEFAULT '{}',
-        created_at   TIMESTAMPTZ DEFAULT NOW()
-      )
-    `);
-    await db.query(`
-      CREATE TABLE IF NOT EXISTS automations (
-        id           SERIAL PRIMARY KEY,
-        name         TEXT NOT NULL,
-        enabled      BOOLEAN DEFAULT true,
-        trigger_type TEXT NOT NULL,
-        match_all    BOOLEAN DEFAULT true,
-        conditions   JSONB NOT NULL DEFAULT '[]',
-        actions      JSONB NOT NULL DEFAULT '[]',
-        created_at   TIMESTAMPTZ DEFAULT NOW(),
-        updated_at   TIMESTAMPTZ DEFAULT NOW()
-      )
-    `);
-    await db.query(`
-      CREATE TABLE IF NOT EXISTS portal_branding (
-        id               INT DEFAULT 1 PRIMARY KEY CHECK (id = 1),
-        brand_name       TEXT    NOT NULL DEFAULT 'Help Centre',
-        logo_url         TEXT,
-        primary_color    TEXT    NOT NULL DEFAULT '#4F46E5',
-        nav_bg           TEXT    NOT NULL DEFAULT '#FFFFFF',
-        nav_text         TEXT    NOT NULL DEFAULT '#111827',
-        nav_active_bg    TEXT    NOT NULL DEFAULT '#EEF2FF',
-        nav_active_text  TEXT    NOT NULL DEFAULT '#4F46E5',
-        page_bg          TEXT    NOT NULL DEFAULT '#F8F9FB',
-        button_bg        TEXT    NOT NULL DEFAULT '#4F46E5',
-        button_text      TEXT    NOT NULL DEFAULT '#FFFFFF',
-        login_title      TEXT    NOT NULL DEFAULT 'Welcome to the Help Centre',
-        login_subtitle   TEXT    NOT NULL DEFAULT 'Sign in with your work email address',
-        footer_text      TEXT,
-        updated_at       TIMESTAMPTZ DEFAULT NOW()
-      )
-    `);
-    await db.query(`INSERT INTO portal_branding (id) VALUES (1) ON CONFLICT DO NOTHING`);
-
-    // ── M365 Tenants ────────────────────────────────────────────────────────
-    await db.query(`
-      CREATE TABLE IF NOT EXISTS m365_tenants (
-        id               SERIAL PRIMARY KEY,
-        display_name     TEXT NOT NULL,
-        tenant_id        TEXT NOT NULL UNIQUE,
-        client_id        TEXT NOT NULL,
-        client_secret    TEXT NOT NULL,
-        access_token     TEXT,
-        token_expires_at TIMESTAMPTZ,
-        connected        BOOLEAN DEFAULT false,
-        connected_at     TIMESTAMPTZ,
-        created_at       TIMESTAMPTZ DEFAULT NOW()
-      )
-    `);
-
-    // ── Service catalog — automation columns ─────────────────────────────────
-    await db.query(`
-      ALTER TABLE service_request_forms
-        ADD COLUMN IF NOT EXISTS requires_approval BOOLEAN DEFAULT false
-    `);
-    await db.query(`
-      ALTER TABLE service_request_forms
-        ADD COLUMN IF NOT EXISTS automation_action JSONB
-    `);
-    await db.query(`
-      ALTER TABLE service_request_forms
-        ADD COLUMN IF NOT EXISTS automation_tenant_id INT REFERENCES m365_tenants(id) ON DELETE SET NULL
-    `);
-
-    // ── Service requests — approval & execution columns ───────────────────────
-    await db.query(`
-      ALTER TABLE service_requests
-        ADD COLUMN IF NOT EXISTS approval_status TEXT DEFAULT 'not_required'
-    `);
-    await db.query(`
-      ALTER TABLE service_requests
-        ADD COLUMN IF NOT EXISTS approved_by INT REFERENCES agents(id) ON DELETE SET NULL
-    `);
-    await db.query(`
-      ALTER TABLE service_requests
-        ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ
-    `);
-    await db.query(`
-      ALTER TABLE service_requests
-        ADD COLUMN IF NOT EXISTS rejection_reason TEXT
-    `);
-    await db.query(`
-      ALTER TABLE service_requests
-        ADD COLUMN IF NOT EXISTS execution_status TEXT
-    `);
-    await db.query(`
-      ALTER TABLE service_requests
-        ADD COLUMN IF NOT EXISTS execution_log JSONB DEFAULT '[]'
-    `);
-
-    // ── Ticket attachments ───────────────────────────────────────────────────
-    await db.query(`
-      CREATE TABLE IF NOT EXISTS ticket_attachments (
-        id            SERIAL PRIMARY KEY,
-        ticket_id     INT  REFERENCES tickets(id)        ON DELETE CASCADE,
-        reply_id      INT  REFERENCES ticket_replies(id) ON DELETE SET NULL,
-        filename      TEXT NOT NULL,
-        original_name TEXT NOT NULL,
-        mime_type     TEXT,
-        size_bytes    INT,
-        created_at    TIMESTAMPTZ DEFAULT NOW()
-      )
-    `);
-
-    // ── Tenant group aliases ─────────────────────────────────────────────────
-    await db.query(`
-      CREATE TABLE IF NOT EXISTS tenant_group_aliases (
-        id         SERIAL PRIMARY KEY,
-        tenant_id  INT  NOT NULL REFERENCES m365_tenants(id) ON DELETE CASCADE,
-        alias      TEXT NOT NULL,
-        group_name TEXT NOT NULL,
-        UNIQUE(tenant_id, alias)
-      )
-    `);
-
-    // SLA breach alert flag
-    await db.query(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS sla_alerted BOOLEAN DEFAULT false`);
-
-    // Custom ticket fields
-    await db.query(`
-      CREATE TABLE IF NOT EXISTS ticket_custom_fields (
-        id SERIAL PRIMARY KEY,
-        label TEXT NOT NULL,
-        field_key TEXT NOT NULL UNIQUE,
-        field_type TEXT NOT NULL DEFAULT 'text',
-        options JSONB DEFAULT '[]',
-        required BOOLEAN DEFAULT false,
-        sort_order INT DEFAULT 0,
-        created_at TIMESTAMPTZ DEFAULT NOW()
-      )
-    `);
-    await db.query(`
-      CREATE TABLE IF NOT EXISTS ticket_field_values (
-        ticket_id INT REFERENCES tickets(id) ON DELETE CASCADE,
-        field_key TEXT NOT NULL,
-        value TEXT,
-        PRIMARY KEY (ticket_id, field_key)
-      )
-    `);
-    await db.query(`
-      CREATE TABLE IF NOT EXISTS ticket_time_entries (
-        id SERIAL PRIMARY KEY,
-        ticket_id INT REFERENCES tickets(id) ON DELETE CASCADE,
-        agent_id  INT REFERENCES agents(id) ON DELETE SET NULL,
-        minutes   INT NOT NULL,
-        note      TEXT,
-        logged_at TIMESTAMPTZ DEFAULT NOW()
-      )
-    `);
-
-    // Audit log
-    await db.query(`
-      CREATE TABLE IF NOT EXISTS audit_log (
-        id          BIGSERIAL PRIMARY KEY,
-        agent_id    INT REFERENCES agents(id) ON DELETE SET NULL,
-        agent_name  TEXT,
-        action      TEXT NOT NULL,
-        entity_type TEXT,
-        entity_id   INT,
-        old_value   JSONB,
-        new_value   JSONB,
-        ip_address  TEXT,
-        created_at  TIMESTAMPTZ DEFAULT NOW()
-      )
-    `);
-    await db.query(`CREATE INDEX IF NOT EXISTS audit_log_entity ON audit_log(entity_type, entity_id)`);
-    await db.query(`CREATE INDEX IF NOT EXISTS audit_log_created ON audit_log(created_at DESC)`);
-
-    // Agent 2FA
-    await db.query(`ALTER TABLE agents ADD COLUMN IF NOT EXISTS totp_secret TEXT`);
-    await db.query(`ALTER TABLE agents ADD COLUMN IF NOT EXISTS totp_enabled BOOLEAN DEFAULT false`);
-
-    console.log('[db] Migrations applied');
+    await runMigrations(db);
   } catch (err) {
-    console.error('[db] Migration error:', err.message);
+    console.error(err.message);
+    console.error('[db] FATAL: aborting startup on migration failure.');
+    process.exit(1);
   }
 
   // Ensure uploads directory exists
   try {
     const fs = require('fs');
-    const uploadsDir = '/data/uploads';
+    const uploadsDir = process.env.UPLOAD_DIR || '/data/uploads';
     if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
   } catch (err) {
     console.error('[uploads] Could not create uploads dir:', err.message);
   }
 
-  // Seed default admin if no agents exist
+  // Seed a bootstrap admin if no agents exist. Login is SSO-only, so this row
+  // mainly exists so the first real admin can be promoted; the password is a
+  // throwaway random value (never the well-known 'changeme123').
   try {
     const check = await db.query('SELECT COUNT(*) FROM agents');
     if (parseInt(check.rows[0].count, 10) === 0) {
-      const hash = await bcrypt.hash('changeme123', 10);
+      const randomPw = require('crypto').randomBytes(24).toString('hex');
+      const hash = await bcrypt.hash(randomPw, 12);
+      const email = process.env.BOOTSTRAP_ADMIN_EMAIL || 'admin@itsm.local';
       await db.query(
         `INSERT INTO agents (name, email, password_hash, role) VALUES ($1, $2, $3, 'admin')`,
-        ['Admin', 'admin@itsm.local', hash]
+        ['Admin', email, hash]
       );
       console.log('─────────────────────────────────────────────');
-      console.log('  Default admin account created:');
-      console.log('  Email:    admin@itsm.local');
-      console.log('  Password: changeme123');
-      console.log('  Change this in Settings → Agents immediately!');
+      console.log('  Bootstrap admin created:', email);
+      console.log('  Login is via Microsoft SSO. To grant yourself admin,');
+      console.log('  sign in once via SSO then promote your agent in the DB,');
+      console.log('  or set BOOTSTRAP_ADMIN_EMAIL to your SSO email before first boot.');
       console.log('─────────────────────────────────────────────');
     }
   } catch (err) {

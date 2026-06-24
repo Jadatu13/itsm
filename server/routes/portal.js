@@ -1,32 +1,81 @@
 const express = require('express');
 const router = express.Router();
-const jwt = require('jsonwebtoken');
+const rateLimit = require('express-rate-limit');
 const db = require('../db');
 const portalAuth = require('../middleware/portalAuth');
 const requireAuth = require('../middleware/auth');
+const requireAdmin = require('../middleware/requireAdmin');
+const { sign, verify } = require('../lib/secret');
+const { decrypt } = require('../lib/crypto');
+const { sendMagicLink } = require('../email');
 
-const SECRET = process.env.JWT_SECRET || 'itsm-dev-secret-change-in-production';
+const APP_URL = (process.env.APP_URL || 'http://localhost:8080').replace(/\/$/, '');
 
-// POST /api/portal/auth/login
-router.post('/auth/login', async (req, res) => {
-  const { email } = req.body;
+// Throttle login attempts to deter enumeration / brute force.
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests. Please wait a few minutes and try again.' },
+});
+
+// POST /api/portal/auth/request-link
+// Emails a one-time, short-lived magic link to the contact. Always responds with
+// a generic success so the endpoint cannot be used to enumerate valid emails.
+router.post('/auth/request-link', loginLimiter, async (req, res) => {
+  const email = String(req.body.email || '').trim();
+  const GENERIC = { ok: true, message: 'If an account exists for that email, a sign-in link has been sent.' };
   if (!email) return res.status(400).json({ error: 'Email is required.' });
   try {
     const result = await db.query(
       'SELECT id, first_name, last_name, email FROM contacts WHERE LOWER(email) = LOWER($1)',
       [email]
     );
+    if (result.rows.length) {
+      const contact = result.rows[0];
+      const magicToken = sign(
+        { type: 'portal-magic', contact_id: contact.id },
+        { expiresIn: '15m' }
+      );
+      const link = `${APP_URL}/portal/login?token=${encodeURIComponent(magicToken)}`;
+      // Fire-and-forget; never reveal send success/failure to the caller.
+      sendMagicLink({ to: contact.email, firstName: contact.first_name, link })
+        .catch(e => console.error('[portal] magic link send failed:', e.message));
+    }
+    res.json(GENERIC);
+  } catch (err) {
+    console.error('[portal] request-link error:', err.message);
+    res.json(GENERIC); // still generic — don't leak internal state
+  }
+});
+
+// POST /api/portal/auth/verify
+// Exchanges a valid magic-link token for a portal session token.
+router.post('/auth/verify', loginLimiter, async (req, res) => {
+  const { token } = req.body;
+  if (!token) return res.status(400).json({ error: 'Token is required.' });
+  let payload;
+  try {
+    payload = verify(token);
+  } catch {
+    return res.status(401).json({ error: 'This sign-in link is invalid or has expired. Please request a new one.' });
+  }
+  if (payload.type !== 'portal-magic') {
+    return res.status(401).json({ error: 'Invalid sign-in link.' });
+  }
+  try {
+    const result = await db.query(
+      'SELECT id, first_name, last_name, email FROM contacts WHERE id = $1',
+      [payload.contact_id]
+    );
     if (!result.rows.length) {
-      return res.status(401).json({ error: 'No account found for this email address.' });
+      return res.status(401).json({ error: 'Account no longer exists.' });
     }
     const contact = result.rows[0];
-    const token = jwt.sign(
-      { type: 'portal', contact_id: contact.id },
-      SECRET,
-      { expiresIn: '7d' }
-    );
+    const sessionToken = sign({ type: 'portal', contact_id: contact.id }, { expiresIn: '7d' });
     res.json({
-      token,
+      token: sessionToken,
       contact: {
         id: contact.id,
         first_name: contact.first_name,
@@ -35,8 +84,8 @@ router.post('/auth/login', async (req, res) => {
       },
     });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Login failed' });
+    console.error('[portal] verify error:', err.message);
+    res.status(500).json({ error: 'Sign in failed' });
   }
 });
 
@@ -374,7 +423,7 @@ router.get('/graph/users', portalAuth, async (req, res) => {
     const tokenUrl = `https://login.microsoftonline.com/${tenant.tenant_id}/oauth2/v2.0/token`;
     const body = new URLSearchParams({
       grant_type: 'client_credentials', client_id: tenant.client_id,
-      client_secret: tenant.client_secret, scope: 'https://graph.microsoft.com/.default',
+      client_secret: decrypt(tenant.client_secret), scope: 'https://graph.microsoft.com/.default',
     });
     const tokenRes = await fetch(tokenUrl, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: body.toString() });
     if (!tokenRes.ok) return res.json({ users: [], connected: false });
@@ -409,7 +458,7 @@ router.get('/graph/groups', portalAuth, async (req, res) => {
     const tokenUrl = `https://login.microsoftonline.com/${tenant.tenant_id}/oauth2/v2.0/token`;
     const body = new URLSearchParams({
       grant_type: 'client_credentials', client_id: tenant.client_id,
-      client_secret: tenant.client_secret, scope: 'https://graph.microsoft.com/.default',
+      client_secret: decrypt(tenant.client_secret), scope: 'https://graph.microsoft.com/.default',
     });
     const tokenRes = await fetch(tokenUrl, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: body.toString() });
     if (!tokenRes.ok) return res.json({ groups: [], connected: false });
@@ -455,8 +504,8 @@ router.get('/check-upn', portalAuth, async (req, res) => {
   }
 });
 
-// POST /api/portal/preview-token — requires agent auth
-router.post('/preview-token', requireAuth, async (req, res) => {
+// POST /api/portal/preview-token — admin only (impersonates a contact in the portal)
+router.post('/preview-token', requireAuth, requireAdmin, async (req, res) => {
   const { contact_id } = req.body;
   if (!contact_id) return res.status(400).json({ error: 'contact_id is required' });
   try {
@@ -468,9 +517,8 @@ router.post('/preview-token', requireAuth, async (req, res) => {
       return res.status(404).json({ error: 'Contact not found' });
     }
     const contact = result.rows[0];
-    const token = jwt.sign(
+    const token = sign(
       { type: 'portal', contact_id: contact.id, is_preview: true },
-      SECRET,
       { expiresIn: '2h' }
     );
     res.json({

@@ -32,23 +32,34 @@ export default function PortalTicketDetail() {
   const [sending, setSending] = useState(false)
   const [error, setError] = useState('')
   const [pendingFiles, setPendingFiles] = useState([])
+  const [dtToken, setDtToken] = useState('')
   const bottomRef = useRef(null)
   const editorRef = useRef(null)
   const fileInputRef = useRef(null)
-
-  const contact = (() => {
-    try { return JSON.parse(localStorage.getItem('portal_contact') || 'null') } catch { return null }
-  })()
 
   useEffect(() => {
     portalFetch(`/api/portal/tickets/${id}`)
       .then(r => r.json())
       .then(data => {
+        if (data.error) { setError(data.error); return }
         setTicket(data)
         setReplies(data.replies || [])
       })
+      .catch(() => setError('Failed to load ticket. Please try again.'))
       .finally(() => setLoading(false))
+    // Short-lived, ticket-scoped download token for attachment URLs.
+    portalFetch(`/api/attachments/ticket/${id}/token`)
+      .then(r => (r.ok ? r.json() : { token: '' }))
+      .then(d => setDtToken(d.token || ''))
+      .catch(() => setDtToken(''))
   }, [id])
+
+  const attachmentUrl = attId => `/api/attachments/${attId}?dt=${encodeURIComponent(dtToken)}`
+  const withTokenisedAttachments = html =>
+    sanitizeEmailHtml(html).replace(
+      /(\/api\/attachments\/\d+)(?![?\w])/g,
+      `$1?dt=${encodeURIComponent(dtToken)}`
+    )
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -60,17 +71,12 @@ export default function PortalTicketDetail() {
     setSending(true)
     setError('')
     try {
-      const token = sessionStorage.getItem('portal_preview_token') || localStorage.getItem('portal_token')
       let res
       if (pendingFiles.length > 0) {
         const fd = new FormData()
         fd.append('body', replyBody)
         pendingFiles.forEach(f => fd.append('files', f))
-        res = await fetch(`/api/portal/tickets/${id}/reply`, {
-          method: 'POST',
-          headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-          body: fd,
-        })
+        res = await portalFetch(`/api/portal/tickets/${id}/reply`, { method: 'POST', body: fd })
       } else {
         res = await portalFetch(`/api/portal/tickets/${id}/reply`, {
           method: 'POST',
@@ -112,7 +118,7 @@ export default function PortalTicketDetail() {
 
           <div className={styles.card} style={{ marginBottom: 20 }}>
             <p className={styles.sectionTitle}>Description</p>
-            <div className={styles.descriptionBox} dangerouslySetInnerHTML={{ __html: sanitizeEmailHtml(ticket.description) }} />
+            <div className={styles.descriptionBox} dangerouslySetInnerHTML={{ __html: withTokenisedAttachments(ticket.description) }} />
           </div>
 
           <div className={`${styles.card} ${styles.conversationSection}`}>
@@ -133,11 +139,11 @@ export default function PortalTicketDetail() {
                     <div className={styles.messageSender}>
                       {r.sender_name || (isAgent ? 'Support Agent' : 'You')}
                     </div>
-                    <div dangerouslySetInnerHTML={{ __html: sanitizeEmailHtml(r.body) }} />
+                    <div dangerouslySetInnerHTML={{ __html: withTokenisedAttachments(r.body) }} />
                     {r.attachments?.length > 0 && (
                       <div className={styles.portalAttachmentList}>
                         {r.attachments.map(att => (
-                          <a key={att.id} href={`/api/attachments/${att.id}?token=${encodeURIComponent(localStorage.getItem('portal_token') || sessionStorage.getItem('portal_preview_token') || '')}`} target="_blank" rel="noopener noreferrer" className={styles.portalAttachmentLink}>
+                          <a key={att.id} href={attachmentUrl(att.id)} target="_blank" rel="noopener noreferrer" className={styles.portalAttachmentLink}>
                             📎 {att.original_name}
                             <span className={styles.portalAttachmentSize}>{att.size_bytes ? ` (${Math.round(att.size_bytes / 1024)}KB)` : ''}</span>
                           </a>

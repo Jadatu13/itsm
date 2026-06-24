@@ -1,54 +1,58 @@
+import DOMPurify from 'isomorphic-dompurify'
+
 /**
- * sanitizeEmailHtml — strip email-client cruft before rendering in the UI.
+ * HTML sanitization for untrusted content (inbound email bodies, KB articles).
  *
- * Handles:
- *  Outlook  — <head>, <style>, <script>, <html>/<body> wrappers,
- *             Office namespace tags (<o:p>, <w:…>, <m:…>),
- *             Outlook conditional comments (<!--[if …]>…<![endif]-->),
- *             runs of empty <p> tags, signature <hr> separators
- *  Gmail    — <div dir="ltr"> wrapper, runs of consecutive empty <div>/<br>
- *  Apple    — similar div-based layout
- *  General  — <!DOCTYPE>, <meta>, <link>, <base> tags,
- *             inline background/color/font-size/margin/padding/height overrides
+ * DOMPurify is the SECURITY boundary — it removes <script>, event handlers
+ * (onerror/onload/…), javascript: URLs, <iframe>/<object>/<embed>, etc. that a
+ * regex can never reliably catch. The regex pass below is purely COSMETIC: it
+ * collapses the spacer cruft email clients (Outlook/Gmail) embed so the body
+ * renders cleanly. Never rely on the regex pass for safety.
  */
-export function sanitizeEmailHtml(html) {
-  if (!html) return ''
 
-  return html
-    // ── Remove entire <head> block ──────────────────────────────────────────
+// Force links to open safely in a new tab and prevent reverse-tabnabbing.
+DOMPurify.addHook('afterSanitizeAttributes', node => {
+  if (node.tagName === 'A' && node.getAttribute('href')) {
+    node.setAttribute('target', '_blank')
+    node.setAttribute('rel', 'noopener noreferrer nofollow')
+  }
+})
+
+const PURIFY_CONFIG = {
+  ALLOWED_TAGS: [
+    'p', 'br', 'b', 'strong', 'i', 'em', 'u', 's', 'span', 'div',
+    'a', 'ul', 'ol', 'li', 'blockquote', 'pre', 'code',
+    'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+    'table', 'thead', 'tbody', 'tr', 'td', 'th',
+    'img', 'hr',
+  ],
+  ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'width', 'height', 'colspan', 'rowspan'],
+  // Only allow http(s), mailto, and our own relative attachment URLs as image/link sources.
+  ALLOWED_URI_REGEXP: /^(?:https?:|mailto:|\/api\/attachments\/|\/portal\/|#)/i,
+  FORBID_TAGS: ['style', 'script', 'iframe', 'object', 'embed', 'form', 'input', 'svg', 'math'],
+  FORBID_ATTR: ['style'],
+}
+
+/** Cosmetic-only pre-pass: strip email-client spacer cruft. NOT a security step. */
+function cosmeticCleanup(html) {
+  return String(html || '')
     .replace(/<head[\s\S]*?<\/head>/gi, '')
-
-    // ── Remove style / script block content ────────────────────────────────
-    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-
-    // ── Outlook conditional comments <!--[if …]>…<![endif]--> ──────────────
     .replace(/<!--\[if[\s\S]*?<!\[endif\]-->/gi, '')
     .replace(/<!--[\s\S]*?-->/g, '')
-
-    // ── Remove structural/meta tags (keep content) ──────────────────────────
-    .replace(/<!DOCTYPE[^>]*>/gi, '')
-    .replace(/<\/?(?:html|body)[^>]*>/gi, '')
-    .replace(/<(?:meta|link|base)[^>]*\/?>/gi, '')
-
-    // ── Office / Word namespace tags e.g. <o:p>, <w:sdt>, <m:oMath> ────────
-    .replace(/<\/?\w+:\w+[^>]*>/gi, '')
-
-    // ── Strip entire style="" attributes ───────────────────────────────────
-    // Email clients embed font, background, color, margin etc. that clash
-    // with the portal's own styling. Remove all inline styles completely.
-    .replace(/\s+style\s*=\s*(?:"[^"]*"|'[^']*')/gi, '')
-
-    // ── Signature separators ────────────────────────────────────────────────
-    .replace(/<hr[^>]*\/?>/gi, '')
-
-    // ── Collapse blank/spacer paragraphs ────────────────────────────────────
-    // 2+ consecutive empty <p> (Outlook spacers between every line)
-    .replace(/(<p[^>]*>\s*(?:<br\s*\/?>|&nbsp;|\s)*<\/p>\s*){2,}/gi, '')
-    // 2+ consecutive empty <div> (Gmail spacers)
+    .replace(/<\/?\w+:\w+[^>]*>/gi, '')                                   // <o:p> etc
+    .replace(/(<p[^>]*>\s*(?:<br\s*\/?>|&nbsp;|\s)*<\/p>\s*){2,}/gi, '')  // empty <p> spacers
     .replace(/(<div[^>]*>\s*(?:<br\s*\/?>|&nbsp;|\s)*<\/div>\s*){2,}/gi, '')
-    // 3+ consecutive <br> → single <br>
     .replace(/(\s*<br\s*\/?>\s*){3,}/gi, '<br>')
+}
 
-    .trim()
+/** Sanitize untrusted HTML for safe rendering. The default export for all sinks. */
+export function sanitizeHtml(html) {
+  if (!html) return ''
+  return DOMPurify.sanitize(html, PURIFY_CONFIG)
+}
+
+/** Sanitize an inbound email body: cosmetic cleanup + full DOMPurify. */
+export function sanitizeEmailHtml(html) {
+  if (!html) return ''
+  return DOMPurify.sanitize(cosmeticCleanup(html), PURIFY_CONFIG).trim()
 }

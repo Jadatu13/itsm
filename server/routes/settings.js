@@ -5,6 +5,11 @@ const db           = require('../db');
 const { encrypt, decrypt } = require('../lib/crypto');
 const requireAdmin = require('../middleware/requireAdmin');
 
+// All settings (infrastructure config + test actions that send mail / poll IMAP)
+// are admin-only. Previously only the PUT writers were guarded, so any agent
+// could read SMTP/IMAP/AI config and trigger test sends.
+router.use(requireAdmin);
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const SMTP_KEYS = ['smtp_host', 'smtp_port', 'smtp_secure', 'smtp_user', 'smtp_pass', 'smtp_from_name', 'smtp_from_email'];

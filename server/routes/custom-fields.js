@@ -32,8 +32,9 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
+const requireAdmin = require('../middleware/requireAdmin');
 
-// GET /api/custom-fields — list all custom fields
+// GET /api/custom-fields — list all custom fields (any agent — used by ticket forms)
 router.get('/', async (req, res) => {
   try {
     const result = await db.query(
@@ -47,7 +48,7 @@ router.get('/', async (req, res) => {
 });
 
 // POST /api/custom-fields — create a field (admin only)
-router.post('/', async (req, res) => {
+router.post('/', requireAdmin, async (req, res) => {
   const { label, field_key, field_type, options, required, sort_order } = req.body;
   if (!label || !field_key) {
     return res.status(400).json({ error: 'label and field_key are required' });
@@ -76,7 +77,7 @@ router.post('/', async (req, res) => {
 });
 
 // PUT /api/custom-fields/:id — update a field
-router.put('/:id', async (req, res) => {
+router.put('/:id', requireAdmin, async (req, res) => {
   const { label, field_type, options, required, sort_order } = req.body;
   if (!label) return res.status(400).json({ error: 'label is required' });
   try {
@@ -102,7 +103,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // DELETE /api/custom-fields/:id — delete a field (and all its values via cascade)
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requireAdmin, async (req, res) => {
   try {
     // Also remove orphaned values manually in case ON DELETE CASCADE isn't set on field_key
     const field = await db.query('SELECT field_key FROM ticket_custom_fields WHERE id = $1', [req.params.id]);

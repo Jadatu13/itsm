@@ -1,11 +1,11 @@
 const express = require('express');
 const router  = express.Router();
 const bcrypt  = require('bcrypt');
-const jwt     = require('jsonwebtoken');
+const jwt     = require('jsonwebtoken'); // only used for jwt.decode of Microsoft's ID token
 const db      = require('../db');
 const requireAuth = require('../middleware/auth');
+const { sign, verify } = require('../lib/secret');
 
-const SECRET  = process.env.JWT_SECRET || 'itsm-dev-secret-change-in-production';
 const EXPIRES = '7d';
 
 // ─── Azure Entra ID SSO ───────────────────────────────────────────────────────
@@ -21,7 +21,7 @@ router.get('/azure/login', (req, res) => {
   if (!AZURE_CLIENT_ID || !AZURE_TENANT_ID) {
     return res.status(500).send('Azure SSO is not configured. Set AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_TENANT_ID and APP_URL in your .env file.');
   }
-  const state  = jwt.sign({ ts: Date.now() }, SECRET, { expiresIn: '5m' });
+  const state  = sign({ ts: Date.now() }, { expiresIn: '5m' });
   const params = new URLSearchParams({
     client_id:     AZURE_CLIENT_ID,
     response_type: 'code',
@@ -43,7 +43,7 @@ router.get('/azure/callback', async (req, res) => {
   }
 
   // Verify state to prevent CSRF
-  try { jwt.verify(state, SECRET); }
+  try { verify(state); }
   catch { return res.redirect('/login?error=Invalid+state+parameter'); }
 
   try {
@@ -91,17 +91,15 @@ router.get('/azure/callback', async (req, res) => {
 
     // If 2FA is enabled, issue a temp token and redirect for 2FA challenge
     if (agentRow.totp_enabled) {
-      const tempToken = jwt.sign(
+      const tempToken = sign(
         { id: agentRow.id, name: agentRow.name, email: agentRow.email, role: agentRow.role, _2fa_pending: true },
-        SECRET,
         { expiresIn: '5m' }
       );
       return res.redirect(`/login?requires2fa=true&tempToken=${encodeURIComponent(tempToken)}`);
     }
 
-    const token = jwt.sign(
+    const token = sign(
       { id: agentRow.id, name: agentRow.name, email: agentRow.email, role: agentRow.role },
-      SECRET,
       { expiresIn: EXPIRES }
     );
 
@@ -139,7 +137,7 @@ router.post('/2fa/challenge', async (req, res) => {
   try {
     let payload;
     try {
-      payload = jwt.verify(tempToken, SECRET);
+      payload = verify(tempToken);
     } catch {
       return res.status(401).json({ error: 'Invalid or expired temp token' });
     }
@@ -162,9 +160,8 @@ router.post('/2fa/challenge', async (req, res) => {
       return res.status(401).json({ error: 'Invalid 2FA code' });
     }
 
-    const fullToken = jwt.sign(
+    const fullToken = sign(
       { id: agent.id, name: agent.name, email: agent.email, role: agent.role, twoFactorVerified: true },
-      SECRET,
       { expiresIn: EXPIRES }
     );
     res.json({ token: fullToken, agent: { id: agent.id, name: agent.name, email: agent.email, role: agent.role } });
@@ -221,9 +218,8 @@ router.post('/2fa/verify', requireAuth, async (req, res) => {
     );
 
     // Re-issue JWT with twoFactorVerified flag
-    const fullToken = jwt.sign(
+    const fullToken = sign(
       { id: req.agent.id, name: req.agent.name, email: req.agent.email, role: req.agent.role, twoFactorVerified: true },
-      SECRET,
       { expiresIn: EXPIRES }
     );
     res.json({ ok: true, token: fullToken });

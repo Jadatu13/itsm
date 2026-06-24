@@ -28,9 +28,15 @@ services:
     environment:
       DATABASE_URL: postgres://itsm:${POSTGRES_PASSWORD:-changeme}@postgres:5432/itsm
       PORT:         3001
+      NODE_ENV:        production
+      # Restrict to your real front-end origin in production (avoid "*").
       CLIENT_URL:      ${CLIENT_URL:-*}
-      # ── Encryption key — set this to protect stored SMTP password ──────────
-      ENCRYPTION_KEY:  ${ENCRYPTION_KEY:-}
+      # ── JWT signing secret — REQUIRED. The app will refuse to start without it. ──
+      # Generate: node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
+      JWT_SECRET:      ${JWT_SECRET:?JWT_SECRET must be set in .env — generate with: node -e \"console.log(require('crypto').randomBytes(48).toString('hex'))\"}
+      # ── Encryption key — REQUIRED to protect stored SMTP/IMAP/AI/M365 secrets ──
+      # Generate: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+      ENCRYPTION_KEY:  ${ENCRYPTION_KEY:?ENCRYPTION_KEY must be set in .env — generate with: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"}
       # ── Microsoft Entra ID SSO ─────────────────────────────────────────────
       AZURE_TENANT_ID:     ${AZURE_TENANT_ID:-}
       AZURE_CLIENT_ID:     ${AZURE_CLIENT_ID:-}

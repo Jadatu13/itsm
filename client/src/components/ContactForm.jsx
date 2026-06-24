@@ -20,21 +20,22 @@ export default function ContactForm({ organisations, onOrgsUpdated, onCreated, o
   const [showNewOrg, setShowNewOrg] = useState(false)
   const [newOrgName, setNewOrgName] = useState('')
 
-  // Domain auto-suggest
+  // Domain auto-suggest (debounced + race-safe)
   useEffect(() => {
     const domain = form.email.split('@')[1]
     if (!domain || !domain.includes('.')) { setOrgSuggestion(null); return }
-    fetch(`/api/organisations/by-domain?domain=${encodeURIComponent(domain)}`)
-      .then(r => r.json())
-      .then(match => {
-        if (match && String(match.id) !== String(form.organisation_id)) {
-          setOrgSuggestion(match)
-        } else {
-          setOrgSuggestion(null)
-        }
-      })
-      .catch(() => setOrgSuggestion(null))
-  }, [form.email])
+    let ignore = false
+    const t = setTimeout(() => {
+      apiFetch(`/api/organisations/by-domain?domain=${encodeURIComponent(domain)}`)
+        .then(r => r.json())
+        .then(match => {
+          if (ignore) return
+          setOrgSuggestion(match && String(match.id) !== String(form.organisation_id) ? match : null)
+        })
+        .catch(() => { if (!ignore) setOrgSuggestion(null) })
+    }, 300)
+    return () => { ignore = true; clearTimeout(t) }
+  }, [form.email, form.organisation_id])
 
   function validate() {
     const e = {}

@@ -47,6 +47,36 @@ docker compose up -d --build
 
 ---
 
+## Deploying on Coolify
+
+[Coolify](https://coolify.io) supports Docker Compose natively — this app deploys with zero modifications.
+
+### Steps
+
+1. In Coolify, create a new **Resource → Docker Compose** application.
+2. Set the **Repository** to `https://github.com/Jadatu13/itsm` (or your fork).
+3. Set **Branch** to `main`.
+4. Under **Environment Variables**, add:
+
+| Variable | Required | Notes |
+|---|---|---|
+| `POSTGRES_PASSWORD` | Yes | Strong random password |
+| `JWT_SECRET` | Yes | 96-char hex — `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"` |
+| `ENCRYPTION_KEY` | Yes | 64-char hex — `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
+| `APP_URL` | Yes | Your Coolify domain, e.g. `https://itsm.yourdomain.com` |
+| `CLIENT_URL` | Yes | Same as `APP_URL` |
+| `AZURE_TENANT_ID` | Optional | For Microsoft SSO login |
+| `AZURE_CLIENT_ID` | Optional | For Microsoft SSO login |
+| `AZURE_CLIENT_SECRET` | Optional | For Microsoft SSO login |
+| `SMTP_HOST` | Optional | For email notifications |
+
+5. Set the **Port** to `80` (the nginx container's internal port). Coolify's proxy handles SSL/HTTPS.
+6. Click **Deploy**.
+
+> **Note:** You do not need to set `APP_PORT` when deploying on Coolify — Coolify's Traefik proxy routes traffic directly to the nginx container on port 80.
+
+---
+
 ## Deploying on Unraid
 
 Unraid's Docker Compose support makes this straightforward.

@@ -65,7 +65,7 @@ async function sendMail({ to, subject, html, text, replyTo }) {
   });
 
   try {
-    await transporter.sendMail({
+    const info = await transporter.sendMail({
       from:    config.from,
       to,
       subject,
@@ -73,6 +73,13 @@ async function sendMail({ to, subject, html, text, replyTo }) {
       text,
       replyTo: replyTo || config.replyTo,   // per-call override, else global inbound address
     });
+    // Surface what the relay actually said so delivery problems are diagnosable.
+    console.log(
+      `[email] sent to ${to} — response: ${info.response || 'n/a'}; ` +
+      `accepted: ${JSON.stringify(info.accepted || [])}; ` +
+      `rejected: ${JSON.stringify(info.rejected || [])}`
+    );
+    return info;
   } catch (err) {
     console.error('[email] Failed to send to', to, '—', err.message);
   }

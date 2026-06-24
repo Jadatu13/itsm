@@ -152,15 +152,42 @@ app.listen(PORT, async () => {
     console.error('[uploads] Could not create uploads dir:', err.message);
   }
 
-  // Seed a bootstrap admin if no agents exist, so the app is usable on first
-  // boot without SSO. The password comes from BOOTSTRAP_ADMIN_PASSWORD if set;
-  // otherwise a strong random one is generated and printed to the logs once.
+  // Bootstrap admin so the app is usable on first boot without SSO.
+  //
+  //  - If BOOTSTRAP_ADMIN_PASSWORD is set, it is applied on EVERY boot: the
+  //    admin is created if missing, or its password is reset if it already
+  //    exists. This is the reliable recovery lever — set it, restart, log in.
+  //    (Remove it again once you've signed in and set your own password,
+  //    otherwise a restart will reset the password back to the env value.)
+  //  - If it is NOT set and there are zero agents, a strong random password is
+  //    generated and printed to the logs once.
   try {
-    const check = await db.query('SELECT COUNT(*) FROM agents');
-    if (parseInt(check.rows[0].count, 10) === 0) {
-      const email = process.env.BOOTSTRAP_ADMIN_EMAIL || 'admin@itsm.local';
-      const provided = process.env.BOOTSTRAP_ADMIN_PASSWORD;
-      const password = provided || require('crypto').randomBytes(12).toString('base64url');
+    const email    = (process.env.BOOTSTRAP_ADMIN_EMAIL || 'admin@itsm.local').toLowerCase().trim();
+    const provided = process.env.BOOTSTRAP_ADMIN_PASSWORD;
+    const agentCount = parseInt(
+      (await db.query('SELECT COUNT(*) FROM agents')).rows[0].count, 10
+    );
+
+    if (provided) {
+      const hash = await bcrypt.hash(provided, 12);
+      // Upsert by email. Promote to admin and (re)set the password every boot.
+      const upd = await db.query(
+        `UPDATE agents SET password_hash = $2, role = 'admin' WHERE LOWER(email) = $1`,
+        [email, hash]
+      );
+      if (upd.rowCount === 0) {
+        await db.query(
+          `INSERT INTO agents (name, email, password_hash, role) VALUES ($1, $2, $3, 'admin')`,
+          ['Admin', email, hash]
+        );
+        console.log('[bootstrap] Admin created from BOOTSTRAP_ADMIN_PASSWORD —', email);
+      } else {
+        console.log('[bootstrap] Admin password reset from BOOTSTRAP_ADMIN_PASSWORD —', email);
+        console.log('[bootstrap] Remove BOOTSTRAP_ADMIN_PASSWORD once you set your own, or it resets on each restart.');
+      }
+      console.log('[bootstrap] Sign in at /login. Microsoft SSO also works once AZURE_* are set.');
+    } else if (agentCount === 0) {
+      const password = require('crypto').randomBytes(12).toString('base64url');
       const hash = await bcrypt.hash(password, 12);
       await db.query(
         `INSERT INTO agents (name, email, password_hash, role) VALUES ($1, $2, $3, 'admin')`,
@@ -169,13 +196,9 @@ app.listen(PORT, async () => {
       console.log('─────────────────────────────────────────────');
       console.log('  Bootstrap admin created — sign in at /login');
       console.log('  Email:   ', email);
-      if (provided) {
-        console.log('  Password: (from BOOTSTRAP_ADMIN_PASSWORD)');
-      } else {
-        console.log('  Password:', password);
-        console.log('  ^ Shown ONCE. Copy it now, then change it (or set');
-        console.log('    BOOTSTRAP_ADMIN_PASSWORD before first boot).');
-      }
+      console.log('  Password:', password);
+      console.log('  ^ Shown ONCE. Copy it now, or set BOOTSTRAP_ADMIN_PASSWORD');
+      console.log('    in your environment for a password you control.');
       console.log('  Microsoft SSO also works once AZURE_* env vars are set.');
       console.log('─────────────────────────────────────────────');
     }

@@ -40,8 +40,10 @@ services:
       # Generate: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
       ENCRYPTION_KEY:  ${ENCRYPTION_KEY:-}
       # ── First-run admin (password login works out of the box) ─────────────
-      # If BOOTSTRAP_ADMIN_PASSWORD is unset, a random one is printed to the
-      # server logs on first boot. SSO below is optional.
+      # If BOOTSTRAP_ADMIN_PASSWORD is set, it is applied on every boot (created
+      # if missing, password reset if it exists) — your reliable way in. Remove
+      # it once you've set your own password. If unset, a random one is printed
+      # to the server logs on first boot. SSO below is optional.
       BOOTSTRAP_ADMIN_EMAIL:    ${BOOTSTRAP_ADMIN_EMAIL:-admin@itsm.local}
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
       # ── Microsoft Entra ID SSO (OPTIONAL) ──────────────────────────────────

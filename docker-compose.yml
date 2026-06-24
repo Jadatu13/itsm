@@ -39,7 +39,12 @@ services:
       # ── Encryption key — REQUIRED to protect stored SMTP/IMAP/AI/M365 secrets ──
       # Generate: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
       ENCRYPTION_KEY:  ${ENCRYPTION_KEY:-}
-      # ── Microsoft Entra ID SSO ─────────────────────────────────────────────
+      # ── First-run admin (password login works out of the box) ─────────────
+      # If BOOTSTRAP_ADMIN_PASSWORD is unset, a random one is printed to the
+      # server logs on first boot. SSO below is optional.
+      BOOTSTRAP_ADMIN_EMAIL:    ${BOOTSTRAP_ADMIN_EMAIL:-admin@itsm.local}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
+      # ── Microsoft Entra ID SSO (OPTIONAL) ──────────────────────────────────
       AZURE_TENANT_ID:     ${AZURE_TENANT_ID:-}
       AZURE_CLIENT_ID:     ${AZURE_CLIENT_ID:-}
       AZURE_CLIENT_SECRET: ${AZURE_CLIENT_SECRET:-}

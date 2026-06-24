@@ -9,9 +9,53 @@ export default function Login() {
   const [tempToken, setTempToken] = useState(null)
   const [code, setCode]           = useState('')
   const [verifying, setVerifying] = useState(false)
+  const [ssoEnabled, setSsoEnabled] = useState(false)
+  const [email, setEmail]         = useState('')
+  const [password, setPassword]   = useState('')
+  const [signingIn, setSigningIn] = useState(false)
   const codeRef = useRef(null)
   const { login }                 = useAuth()
   const navigate                  = useNavigate()
+
+  // Discover which login methods the backend offers (SSO is optional).
+  useEffect(() => {
+    fetch('/api/auth/config')
+      .then(r => r.json())
+      .then(cfg => setSsoEnabled(!!cfg.ssoEnabled))
+      .catch(() => {})
+  }, [])
+
+  async function handlePasswordSubmit(e) {
+    e.preventDefault()
+    if (!email.trim() || !password) return
+    setSigningIn(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim(), password }),
+      })
+      const d = await res.json()
+      if (!res.ok) {
+        setError(d.error || 'Sign in failed. Please try again.')
+        setSigningIn(false)
+        return
+      }
+      if (d.requires2fa && d.tempToken) {
+        setRequires2fa(true)
+        setTempToken(d.tempToken)
+        setSigningIn(false)
+        setTimeout(() => codeRef.current?.focus(), 100)
+        return
+      }
+      login(d.token, d.agent)
+      navigate('/dashboard', { replace: true })
+    } catch {
+      setError('Something went wrong. Please try again.')
+      setSigningIn(false)
+    }
+  }
 
   // Handle SSO callback: /login?token=... or /login?error=...
   // Also handle 2FA redirect: /login?requires2fa=true&tempToken=...
@@ -142,14 +186,46 @@ export default function Login() {
         </div>
 
         <h1 className={styles.title}>Sign in</h1>
-        <p className={styles.subtitle}>Use your Microsoft account to continue.</p>
+        <p className={styles.subtitle}>Enter your email and password to continue.</p>
 
         {error && <div className={styles.error}>{error}</div>}
 
-        <a href="/api/auth/azure/login" className={styles.msBtn}>
-          <MicrosoftLogo />
-          Sign in with Microsoft
-        </a>
+        <form onSubmit={handlePasswordSubmit} className={styles.form}>
+          <input
+            type="email"
+            className={styles.input}
+            placeholder="Email"
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+            autoComplete="username"
+            autoFocus
+          />
+          <input
+            type="password"
+            className={styles.input}
+            placeholder="Password"
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+            autoComplete="current-password"
+          />
+          <button
+            type="submit"
+            className={styles.primaryBtn}
+            disabled={signingIn || !email.trim() || !password}
+          >
+            {signingIn ? 'Signing in…' : 'Sign in'}
+          </button>
+        </form>
+
+        {ssoEnabled && (
+          <>
+            <div className={styles.divider}><span>or</span></div>
+            <a href="/api/auth/azure/login" className={styles.msBtn}>
+              <MicrosoftLogo />
+              Sign in with Microsoft
+            </a>
+          </>
+        )}
       </div>
     </div>
   )

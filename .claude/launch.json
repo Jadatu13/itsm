@@ -2,11 +2,11 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "itsm",
-      "runtimeExecutable": "sleep",
-      "runtimeArgs": ["3600"],
-      "port": 8080,
-      "autoPort": false
+      "name": "client",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "cwd": "client",
+      "port": 5173
     }
   ]
 }

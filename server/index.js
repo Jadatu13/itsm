@@ -152,24 +152,31 @@ app.listen(PORT, async () => {
     console.error('[uploads] Could not create uploads dir:', err.message);
   }
 
-  // Seed a bootstrap admin if no agents exist. Login is SSO-only, so this row
-  // mainly exists so the first real admin can be promoted; the password is a
-  // throwaway random value (never the well-known 'changeme123').
+  // Seed a bootstrap admin if no agents exist, so the app is usable on first
+  // boot without SSO. The password comes from BOOTSTRAP_ADMIN_PASSWORD if set;
+  // otherwise a strong random one is generated and printed to the logs once.
   try {
     const check = await db.query('SELECT COUNT(*) FROM agents');
     if (parseInt(check.rows[0].count, 10) === 0) {
-      const randomPw = require('crypto').randomBytes(24).toString('hex');
-      const hash = await bcrypt.hash(randomPw, 12);
       const email = process.env.BOOTSTRAP_ADMIN_EMAIL || 'admin@itsm.local';
+      const provided = process.env.BOOTSTRAP_ADMIN_PASSWORD;
+      const password = provided || require('crypto').randomBytes(12).toString('base64url');
+      const hash = await bcrypt.hash(password, 12);
       await db.query(
         `INSERT INTO agents (name, email, password_hash, role) VALUES ($1, $2, $3, 'admin')`,
         ['Admin', email, hash]
       );
       console.log('─────────────────────────────────────────────');
-      console.log('  Bootstrap admin created:', email);
-      console.log('  Login is via Microsoft SSO. To grant yourself admin,');
-      console.log('  sign in once via SSO then promote your agent in the DB,');
-      console.log('  or set BOOTSTRAP_ADMIN_EMAIL to your SSO email before first boot.');
+      console.log('  Bootstrap admin created — sign in at /login');
+      console.log('  Email:   ', email);
+      if (provided) {
+        console.log('  Password: (from BOOTSTRAP_ADMIN_PASSWORD)');
+      } else {
+        console.log('  Password:', password);
+        console.log('  ^ Shown ONCE. Copy it now, then change it (or set');
+        console.log('    BOOTSTRAP_ADMIN_PASSWORD before first boot).');
+      }
+      console.log('  Microsoft SSO also works once AZURE_* env vars are set.');
       console.log('─────────────────────────────────────────────');
     }
   } catch (err) {

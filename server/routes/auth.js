@@ -111,9 +111,48 @@ router.get('/azure/callback', async (req, res) => {
   }
 });
 
-// POST /api/auth/login — disabled, SSO only
-router.post('/login', (req, res) => {
-  res.status(403).json({ error: 'Password login is disabled. Please sign in with Microsoft SSO.' });
+// POST /api/auth/login — email + password login (fallback when SSO is not used)
+router.post('/login', async (req, res) => {
+  const email    = (req.body.email || '').toLowerCase().trim();
+  const password = req.body.password || '';
+  if (!email || !password) {
+    return res.status(400).json({ error: 'Email and password are required.' });
+  }
+
+  try {
+    const agentRow = await db.query(
+      'SELECT id, name, email, role, password_hash, totp_enabled FROM agents WHERE LOWER(email) = $1',
+      [email]
+    ).then(r => r.rows[0]);
+
+    // Generic message — don't reveal whether the account exists. Accounts
+    // created via SSO carry the sentinel hash 'sso-only' and have no password.
+    const INVALID = 'Invalid email or password.';
+    if (!agentRow || !agentRow.password_hash || agentRow.password_hash === 'sso-only') {
+      return res.status(401).json({ error: INVALID });
+    }
+
+    const ok = await bcrypt.compare(password, agentRow.password_hash);
+    if (!ok) return res.status(401).json({ error: INVALID });
+
+    // If 2FA is enabled, issue a short-lived temp token for the TOTP challenge.
+    if (agentRow.totp_enabled) {
+      const tempToken = sign(
+        { id: agentRow.id, name: agentRow.name, email: agentRow.email, role: agentRow.role, _2fa_pending: true },
+        { expiresIn: '5m' }
+      );
+      return res.json({ requires2fa: true, tempToken });
+    }
+
+    const token = sign(
+      { id: agentRow.id, name: agentRow.name, email: agentRow.email, role: agentRow.role },
+      { expiresIn: EXPIRES }
+    );
+    res.json({ token, agent: { id: agentRow.id, name: agentRow.name, email: agentRow.email, role: agentRow.role } });
+  } catch (err) {
+    console.error('[login]', err.message);
+    res.status(500).json({ error: 'Login failed. Please try again.' });
+  }
 });
 
 // GET /api/auth/me
@@ -121,9 +160,12 @@ router.get('/me', requireAuth, (req, res) => {
   res.json(req.agent);
 });
 
-// GET /api/auth/config  — tells the frontend whether SSO is configured
+// GET /api/auth/config  — tells the frontend which login methods are available
 router.get('/config', (req, res) => {
-  res.json({ ssoEnabled: !!(AZURE_CLIENT_ID && AZURE_TENANT_ID) });
+  res.json({
+    ssoEnabled: !!(AZURE_CLIENT_ID && AZURE_TENANT_ID),
+    passwordEnabled: true,
+  });
 });
 
 // ─── 2FA — TOTP ──────────────────────────────────────────────────────────────
